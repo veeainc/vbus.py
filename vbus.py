@@ -102,7 +102,9 @@ class Client(NATS):
         self._loop =  loop or asyncio.get_event_loop()
 
         print("check if we already have a vbus config file")
-        rootfolder = os.environ['HOME']
+        rootfolder = os.environ['VBUS_PATH']
+        if rootfolder == "":
+            rootfolder = os.environ['HOME']
         if os.access(rootfolder+"/vbus", os.F_OK) == False:
             os.mkdir(rootfolder+"/vbus")
         if os.path.isfile(rootfolder + "/vbus/" + id + ".conf"):
