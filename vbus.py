@@ -105,11 +105,12 @@ class Client(NATS):
         rootfolder = os.environ['VBUS_PATH']
         if rootfolder == "":
             rootfolder = os.environ['HOME']
-        if os.access(rootfolder+"/vbus", os.F_OK) == False:
-            os.mkdir(rootfolder+"/vbus")
-        if os.path.isfile(rootfolder + "/vbus/" + id + ".conf"):
+            rootfolder = rootfolder + "/vbus"
+        if os.access(rootfolder, os.F_OK) == False:
+            os.mkdir(rootfolder)
+        if os.path.isfile(rootfolder + id + ".conf"):
             print("load existing configuration file for " + id )
-            self.element = json.loads(open (rootfolder + "/vbus/" + id + ".conf").read())
+            self.element = json.loads(open (rootfolder + id + ".conf").read())
         else:
             print("create new configuration file for " + id)
             #create user
@@ -184,7 +185,7 @@ class Client(NATS):
             raise "error"
 
         # save config file
-        with open(rootfolder + "/vbus/" + id + ".conf", 'w+') as f:
+        with open(rootfolder + id + ".conf", 'w+') as f:
             json.dump(self.element, f)
 
         # connect to vbus server
