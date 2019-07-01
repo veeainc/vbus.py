@@ -18,5 +18,10 @@ setup(
     author='Michael Mardinian',
     author_email='mmardinian@veea.com',
     license='To Be Define',
-    packages=['vbus']
+    packages=['vbus'],
+    install_requires=[
+          'zeroconf',
+          'bcrypt',
+          'asyncio-nats-client'
+      ],
 )
