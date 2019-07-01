@@ -59,7 +59,7 @@ def zeroconf_search():
         print("Service %s of type %s state changed: %s" % (name, service_type, state_change))
 
         if state_change is ServiceStateChange.Added:
-            info = zeroconf.get_service_info(type, name)
+            info = zeroconf.get_service_info(service_type, name)
             print("Service %s added, service info: %s" % (name, info))
             print("Address: %s:%d" % (socket.inet_ntoa(cast(bytes, info.address)), cast(int, info.port)))
             if "vbus"==name.split("/")[0]:
