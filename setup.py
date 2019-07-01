@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 setup(
@@ -18,7 +18,5 @@ setup(
     author='Michael Mardinian',
     author_email='mmardinian@veea.com',
     license='To Be Define',
-    packages=['vbus'],
-    zip_safe=True,
-    extras_require=EXTRAS
+    packages=find_packages(),
 )
