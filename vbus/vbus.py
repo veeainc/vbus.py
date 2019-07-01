@@ -50,7 +50,7 @@ async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
         await nc.close()
         return True
 
-def zeroconf_search(loop):
+def zeroconf_search():
     z_vbus_url = None
     
     def on_service_state_change(
@@ -73,8 +73,7 @@ def zeroconf_search(loop):
     #listener = MyListener()
     browser = ServiceBrowser(zeroconf, "_nats._tcp.local.", handlers=[on_service_state_change])
     
-    # time.sleep( 5 )
-    await asyncio.sleep(5)
+    time.sleep( 5 )
     zeroconf.close()
     print("return zeroconf: " + z_vbus_url)
     return z_vbus_url
