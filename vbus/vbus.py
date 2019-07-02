@@ -102,13 +102,13 @@ class Client(NATS):
 
         self._loop =  loop or asyncio.get_event_loop()
 
-        print("check if we already have a vbus config file")
         rootfolder = os.environ['VBUS_PATH']
         if rootfolder == "":
             rootfolder = os.environ['HOME']
             rootfolder = rootfolder + "/vbus/"
         if os.access(rootfolder, os.F_OK) == False:
             os.mkdir(rootfolder)
+        print("check if we already have a vbus config file in " + rootfolder)
         if os.path.isfile(rootfolder + id + ".conf"):
             print("load existing configuration file for " + id )
             self.element = json.loads(open (rootfolder + id + ".conf").read())
@@ -186,8 +186,8 @@ class Client(NATS):
             raise "error"
 
         # save config file
-        print("try to record file: " + rootfolder + id + ".conf")
         with open(rootfolder + id + ".conf", 'w+') as f:
+            print("record file: " + rootfolder + id + ".conf")
             json.dump(self.element, f)
 
         # connect to vbus server
