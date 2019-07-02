@@ -106,7 +106,7 @@ class Client(NATS):
         if rootfolder == "":
             rootfolder = os.environ['HOME']
             rootfolder = rootfolder + "/vbus/"
-        else if rootfolder.endswith("/") == FALSE
+        elif rootfolder.endswith("/") == FALSE
             rootfolder = rootfolder + "/"
         if os.access(rootfolder, os.F_OK) == False:
             os.mkdir(rootfolder)
