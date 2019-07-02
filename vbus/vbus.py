@@ -51,7 +51,7 @@ async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
         return True
 
 def zeroconf_search():
-    z_vbus_url = None
+    z_vbus_url = ""
     
     def on_service_state_change(
     zeroconf: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange,
@@ -66,7 +66,7 @@ def zeroconf_search():
             if "vbus"==name.split("/")[0]:
             # next step compare host_name to choose the same one than the service if available
                 print("vbus found !!")
-                if z_vbus_url == None:
+                if z_vbus_url == "":
                     z_vbus_url = "nats://" + socket.inet_ntoa(cast(bytes, info.address))+ ":" + str(info.port)
                     print("zeroconf reconstruct: " + z_vbus_url)
 
@@ -74,7 +74,9 @@ def zeroconf_search():
     #listener = MyListener()
     browser = ServiceBrowser(zeroconf, "_nats._tcp.local.", handlers=[on_service_state_change])
     
+    print("before sleep " + z_vbus_url)
     time.sleep( 5 )
+    print("after sleep " + z_vbus_url)
     zeroconf.close()
     print("return zeroconf: " + z_vbus_url)
     return z_vbus_url
