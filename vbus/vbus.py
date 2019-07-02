@@ -224,8 +224,10 @@ class Client(NATS):
         #     except:
         #         print("user not recognised by system")
         #         return
+        await asyncio.sleep(1, loop=loop)
+        
         try:
-            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["element"]["uuid"], password=self.element["private"]["key"], connect_timeout=0.5, max_reconnect_attempts=2,closed_cb=self.close)
+            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=0.5, max_reconnect_attempts=2,closed_cb=self.close)
         except:
             print("user not recognised by system")
             return
