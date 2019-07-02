@@ -65,9 +65,9 @@ def zeroconf_search():
             if "vbus"==name.split("/")[0]:
             # next step compare host_name to choose the same one than the service if available
                 print("vbus found !!")
-                if z_vbus_url == None:
-                    z_vbus_url = "nats://" + socket.inet_ntoa(cast(bytes, info.address))+ ":" + cast(int, info.port)
-                    print("zeroconf reconstruct: " + z_vbus_url)
+                #if z_vbus_url == None:
+                z_vbus_url = "nats://" + socket.inet_ntoa(cast(bytes, info.address))+ ":" + cast(int, info.port)
+                print("zeroconf reconstruct: " + z_vbus_url)
 
     zeroconf = Zeroconf()
     #listener = MyListener()
