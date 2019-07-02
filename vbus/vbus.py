@@ -50,9 +50,8 @@ async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
         await nc.close()
         return True
 
+z_vbus_url = ""
 def zeroconf_search():
-    z_vbus_url = ""
-    
     def on_service_state_change(
     zeroconf: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange,
     ) -> None:
