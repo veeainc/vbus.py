@@ -73,11 +73,8 @@ def zeroconf_search():
     #listener = MyListener()
     browser = ServiceBrowser(zeroconf, "_nats._tcp.local.", handlers=[on_service_state_change])
     
-    print("before sleep " + z_vbus_url)
     time.sleep( 5 )
-    print("after sleep " + z_vbus_url)
     zeroconf.close()
-    print("return zeroconf: " + z_vbus_url)
     return z_vbus_url
  
 class Client(NATS):
@@ -109,7 +106,7 @@ class Client(NATS):
         rootfolder = os.environ['VBUS_PATH']
         if rootfolder == "":
             rootfolder = os.environ['HOME']
-            rootfolder = rootfolder + "/vbus"
+            rootfolder = rootfolder + "/vbus/"
         if os.access(rootfolder, os.F_OK) == False:
             os.mkdir(rootfolder)
         if os.path.isfile(rootfolder + id + ".conf"):
@@ -189,6 +186,7 @@ class Client(NATS):
             raise "error"
 
         # save config file
+        print("try to record file: " + rootfolder + id + ".conf")
         with open(rootfolder + id + ".conf", 'w+') as f:
             json.dump(self.element, f)
 
