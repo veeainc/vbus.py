@@ -106,6 +106,8 @@ class Client(NATS):
         if rootfolder == "":
             rootfolder = os.environ['HOME']
             rootfolder = rootfolder + "/vbus/"
+        else if rootfolder.endswith("/") == FALSE
+            rootfolder = rootfolder + "/"
         if os.access(rootfolder, os.F_OK) == False:
             os.mkdir(rootfolder)
         print("check if we already have a vbus config file in " + rootfolder)
