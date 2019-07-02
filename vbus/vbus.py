@@ -186,6 +186,7 @@ class Client(NATS):
             raise "error"
 
         # save config file
+        print("try to open config file " + rootfolder + id + ".conf")
         with open(rootfolder + id + ".conf", 'w+') as f:
             print("record file: " + rootfolder + id + ".conf")
             json.dump(self.element, f)
