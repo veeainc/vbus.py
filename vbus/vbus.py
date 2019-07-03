@@ -28,7 +28,8 @@ async def test_vbus_url(url, loop, user="anonymous", pwd="anonymous"):
         await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=0.5, max_reconnect_attempts=2)
     except Exception as e: 
         print(e)
-        raise e
+        #raise e
+        return False
     else:
         print(url + " worked")
         await nc.close()
@@ -41,7 +42,8 @@ async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
         await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=0.5, max_reconnect_attempts=2)
     except Exception as e: 
         print(e)
-        raise e
+        #raise e
+        return False
     else:
         print(url + " worked")
         print("send: " + str(msg))
@@ -197,20 +199,18 @@ class Client(NATS):
         directconnect = True
         
         print("open connection with local nats")
-        try:
-            await test_vbus_url(self.element["vbus"]["url"], loop=self._loop, user=self.element["element"]["uuid"], pwd=self.element["private"]["key"])
-        except:
+        if await test_vbus_url(self.element["vbus"]["url"], loop=self._loop, user=self.element["element"]["uuid"], pwd=self.element["private"]["key"]) == True:
+            print("vbus user already known")
+        else:
             print("vbus user unknown, try anonymous")
-            try:
-                await test_vbus_url(self.element["vbus"]["url"], loop=self._loop)
-            except:
+            if await test_vbus_url(self.element["vbus"]["url"], loop=self._loop) == True:
+                directconnect = False
+            else:
                 print("anonymous user can't connect")
                 print("can't connect")
                 return
-            finally:
-                directconnect = False
-        else:
-            print("vbus user already known")
+                
+            
 
         print("publish user")
         print(json.dumps(self.element["auth"]).encode('utf-8'))
@@ -228,9 +228,11 @@ class Client(NATS):
 
         try:
             await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=0.5, max_reconnect_attempts=2,closed_cb=self.close)
-        except:
+        except Exception as e: 
+            print(e)
             print("user not recognised by system")
             return
+        
 
         print("publish element")
         print(json.dumps(self.element["element"]).encode('utf-8'))
