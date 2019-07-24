@@ -126,6 +126,7 @@ class Client(NATS):
             hostname = socket.gethostname()
             self.element["element"]["host"] = hostname
             self.element["element"]["uuid"] = hostname + "." + id
+            self.element["element"]["bridge"] = "None"
 
             # Create a new User KeyPair
             password = GenPasswd()
@@ -242,7 +243,10 @@ class Client(NATS):
             print("cannot publish new element")
             return
 
-        #await asyncio.sleep(1, loop=loop)
+        try:
+            await self.flush(10)
+        except:
+            print("Flush error")
 
     async def List(self, filter_json):
         message = None
