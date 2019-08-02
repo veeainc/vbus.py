@@ -25,7 +25,7 @@ async def test_vbus_url(url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
     print("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
-        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=0.5, max_reconnect_attempts=2)
+        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=2, max_reconnect_attempts=0)
     except Exception as e: 
         print(e)
         #raise e
@@ -39,7 +39,7 @@ async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
     print("test pub to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
-        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=0.5, max_reconnect_attempts=2)
+        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=2, max_reconnect_attempts=2)
     except Exception as e: 
         print(e)
         #raise e
@@ -228,7 +228,7 @@ class Client(NATS):
         await asyncio.sleep(1, loop=loop)
 
         try:
-            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=0.5, max_reconnect_attempts=2,closed_cb=self.close)
+            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=2, max_reconnect_attempts=2,closed_cb=self.close)
         except Exception as e: 
             print(e)
             print("user not recognised by system")
