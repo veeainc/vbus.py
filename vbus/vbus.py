@@ -23,7 +23,7 @@ def GenPasswd(length=22, chars=string.ascii_letters+string.digits):
 
 async def test_vbus_url(url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
-    print("test connection to: " + url)
+    print("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
         await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=0.5, max_reconnect_attempts=2)
     except Exception as e: 
@@ -37,7 +37,7 @@ async def test_vbus_url(url, loop, user="anonymous", pwd="anonymous"):
 
 async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
-    print("test connection to: " + url)
+    print("test pub to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
         await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=0.5, max_reconnect_attempts=2)
     except Exception as e: 
