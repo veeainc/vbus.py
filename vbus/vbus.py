@@ -7,6 +7,7 @@ import bcrypt
 import string
 import asyncio
 import time
+import logging
 from typing import cast
 from random import choice
 from contextlib import contextmanager
@@ -14,6 +15,8 @@ from contextlib import contextmanager
 from zeroconf import ServiceBrowser, Zeroconf, ServiceStateChange
 from nats.aio.client import Client as NATS
 from nats.aio.errors import ErrConnectionClosed, ErrTimeout, ErrNoServers, ErrAuthorization
+
+LOGGER = logging.getLogger(__name__)
 
 def GenPasswd(length=22, chars=string.ascii_letters+string.digits):
     newpasswd = []
@@ -23,30 +26,30 @@ def GenPasswd(length=22, chars=string.ascii_letters+string.digits):
 
 async def test_vbus_url(url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
-    print("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
+    LOGGER.debug("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
         await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=2, max_reconnect_attempts=0)
     except Exception as e: 
-        print(e)
+        LOGGER.warning(e)
         #raise e
         return False
     else:
-        print(url + " worked")
+        LOGGER.debug(url + " worked")
         await nc.close()
         return True
 
 async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
-    print("test pub to: " + url + " with user: " + user + " and pwd: " + pwd)
+    LOGGER.debug("test pub to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
         await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=2, max_reconnect_attempts=2)
     except Exception as e: 
-        print(e)
+        LOGGER.warning(e)
         #raise e
         return False
     else:
-        print(url + " worked")
-        print("send: " + str(msg))
+        LOGGER.debug(url + " worked")
+        LOGGER.debug("send: " + str(msg))
         await nc.publish(to, msg)
         await nc.flush()
         await nc.close()
@@ -58,18 +61,18 @@ def zeroconf_search():
     zeroconf: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange,
     ) -> None:
         global z_vbus_url
-        print("Service %s of type %s state changed: %s" % (name, service_type, state_change))
+        LOGGER.debug("Service %s of type %s state changed: %s" % (name, service_type, state_change))
 
         if state_change is ServiceStateChange.Added:
             info = zeroconf.get_service_info(service_type, name)
-            print("Service %s added, service info: %s" % (name, info))
-            print("Address: %s:%d" % (socket.inet_ntoa(cast(bytes, info.address)), cast(int, info.port)))
+            LOGGER.debug("Service %s added, service info: %s" % (name, info))
+            LOGGER.debug("Address: %s:%d" % (socket.inet_ntoa(cast(bytes, info.address)), cast(int, info.port)))
             if "vbus"==name.split("/")[0]:
             # next step compare host_name to choose the same one than the service if available
-                print("vbus found !!")
+                LOGGER.debug("vbus found !!")
                 if z_vbus_url == "":
                     z_vbus_url = "nats://" + socket.inet_ntoa(cast(bytes, info.address))+ ":" + str(info.port)
-                    print("zeroconf reconstruct: " + z_vbus_url)
+                    LOGGER.debug("zeroconf reconstruct: " + z_vbus_url)
 
     zeroconf = Zeroconf()
     #listener = MyListener()
@@ -92,10 +95,10 @@ class Client(NATS):
 
     def __exit__(self, exc_type, exc_value, traceback):
         super().__exit__()
-        print("vbus exit")
+        LOGGER.debug("vbus exit")
 
     def vClose(self):
-        print("here we close")
+        LOGGER.debug("here we close")
 
     async def vConnect(self,
                 id,
@@ -112,12 +115,12 @@ class Client(NATS):
             rootfolder = rootfolder + "/"
         if os.access(rootfolder, os.F_OK) == False:
             os.mkdir(rootfolder)
-        print("check if we already have a vbus config file in " + rootfolder)
+        LOGGER.debug("check if we already have a vbus config file in " + rootfolder)
         if os.path.isfile(rootfolder + id + ".conf"):
-            print("load existing configuration file for " + id )
+            LOGGER.debug("load existing configuration file for " + id )
             self.element = json.loads(open (rootfolder + id + ".conf").read())
         else:
-            print("create new configuration file for " + id)
+            LOGGER.debug("create new configuration file for " + id)
             #create user
             self.element = {}
             self.element["element"] = {}
@@ -143,15 +146,15 @@ class Client(NATS):
             self.element["vbus"] = {}
             self.element["vbus"]["url"] = None
 
-        print(self.element)
+        LOGGER.debug(self.element)
 
-        print("find vbus url")
+        LOGGER.debug("find vbus url")
         # find vbus server  - strategy 1: get url from config file
         if self.element["vbus"]["url"] != None:
             if await test_vbus_url(self.element["vbus"]["url"], self._loop) == True:
-                print("url from config file ok: " + self.element["vbus"]["url"])
+                LOGGER.debug("url from config file ok: " + self.element["vbus"]["url"])
             else:
-                print("url from config file hs: " + self.element["vbus"]["url"])
+                LOGGER.debug("url from config file hs: " + self.element["vbus"]["url"])
                 self.element["vbus"]["url"] = None
             
         # find vbus server  - strategy 2: get url from ENV:VBUS_URL
@@ -159,62 +162,62 @@ class Client(NATS):
             env_vbus_url = os.environ.get("VBUS_URL")
             if (env_vbus_url != None) and (env_vbus_url != ""):
                 if await test_vbus_url(env_vbus_url, self._loop) == True:
-                    print("url from ENV ok: " + env_vbus_url)
+                    LOGGER.debug("url from ENV ok: " + env_vbus_url)
                     self.element["vbus"]["url"] = env_vbus_url
                 else:
-                    print("url from ENV hs: " + env_vbus_url)
+                    LOGGER.debug("url from ENV hs: " + env_vbus_url)
 
         # find vbus server  - strategy 3: try default url nats://hostname:21400
         if self.element["vbus"]["url"] == None:
             hostname = socket.gethostname()
             default_vbus_url = "nats://" + hostname + ":21400"
             if await test_vbus_url(default_vbus_url, self._loop) == True:
-                print("url from default ok: " + default_vbus_url)
+                LOGGER.debug("url from default ok: " + default_vbus_url)
                 self.element["vbus"]["url"] = default_vbus_url
             else:
-                print("url from default hs: " + default_vbus_url)
+                LOGGER.debug("url from default hs: " + default_vbus_url)
 
         # find vbus server  - strategy 4: find it using avahi
         if self.element["vbus"]["url"] == None:
             zeroconf_vbus_url = zeroconf_search()
             if (zeroconf_vbus_url != None):
                 if await test_vbus_url(zeroconf_vbus_url, self._loop) == True:
-                    print("url from discovery ok: " + zeroconf_vbus_url)
+                    LOGGER.debug("url from discovery ok: " + zeroconf_vbus_url)
                     self.element["vbus"]["url"] = zeroconf_vbus_url
                 else:
-                    print("url from discovery hs: " + zeroconf_vbus_url)
+                    LOGGER.debug("url from discovery hs: " + zeroconf_vbus_url)
             else:
-                print("zeroconf found no url")
+                LOGGER.debug("zeroconf found no url")
 
         if self.element["vbus"]["url"] == None:
-            print("no valid url vbus found")
+            LOGGER.debug("no valid url vbus found")
             raise "error"
 
         # save config file
-        print("try to open config file " + rootfolder + id + ".conf")
+        LOGGER.debug("try to open config file " + rootfolder + id + ".conf")
         with open(rootfolder + id + ".conf", 'w+') as f:
-            print("record file: " + rootfolder + id + ".conf")
+            LOGGER.debug("record file: " + rootfolder + id + ".conf")
             json.dump(self.element, f)
 
         # connect to vbus server
         directconnect = True
         
-        print("open connection with local nats")
+        LOGGER.debug("open connection with local nats")
         if await test_vbus_url(self.element["vbus"]["url"], loop=self._loop, user=self.element["element"]["uuid"], pwd=self.element["private"]["key"]) == True:
-            print("vbus user already known")
+            LOGGER.debug("vbus user already known")
         else:
-            print("vbus user unknown, try anonymous")
+            LOGGER.debug("vbus user unknown, try anonymous")
             if await test_vbus_url(self.element["vbus"]["url"], loop=self._loop) == True:
                 directconnect = False
             else:
-                print("anonymous user can't connect")
-                print("can't connect")
+                LOGGER.error("anonymous user can't connect")
+                LOGGER.error("can't connect")
                 return
                 
             
 
-        print("publish user")
-        print(json.dumps(self.element["auth"]).encode('utf-8'))
+        LOGGER.debug("publish user")
+        LOGGER.debug(json.dumps(self.element["auth"]).encode('utf-8'))
         await test_vbus_pub(to="system.auth.adduser", msg=json.dumps(self.element["auth"]).encode('utf-8'), url=self.element["vbus"]["url"], loop=self._loop)
 
         # if directconnect == False:
@@ -230,32 +233,32 @@ class Client(NATS):
         try:
             await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=2, max_reconnect_attempts=2,closed_cb=self.close)
         except Exception as e: 
-            print(e)
-            print("user not recognised by system")
+            LOGGER.error(e)
+            LOGGER.error("user not recognised by system")
             return
         
 
-        print("publish element")
-        print(json.dumps(self.element["element"]).encode('utf-8'))
+        LOGGER.debug("publish element")
+        LOGGER.debug(json.dumps(self.element["element"]).encode('utf-8'))
         try:
             await self.publish("system.db.newelement", json.dumps(self.element["element"]).encode('utf-8'))
         except:
-            print("cannot publish new element")
+            LOGGER.error("cannot publish new element")
             return
 
         try:
             await self.flush(10)
         except:
-            print("Flush error")
+            LOGGER.error("Flush error")
 
     async def List(self, filter_json):
         message = None
         try:
             response = await self.request("system.db.getElementList", filter_json, 1)
-            print("Received response: {message}".format(
+            LOGGER.debug("Received response: {message}".format(
                 message=response.data.decode()))
         except ErrTimeout:
-            print("Request timed out")
+            LOGGER.warning("Request timed out")
             
         return message
 
