@@ -22,6 +22,7 @@ setup(
     install_requires=[
           'zeroconf',
           'bcrypt',
+          'dbus-python',
           'asyncio-nats-client'
       ],
 )
