@@ -8,6 +8,7 @@ import string
 import asyncio
 import time
 import logging
+from pydbus import SystemBus
 from typing import cast
 from random import choice
 from contextlib import contextmanager
@@ -28,7 +29,7 @@ async def test_vbus_url(url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
     LOGGER.debug("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
-        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=2, max_reconnect_attempts=0)
+        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=1, max_reconnect_attempts=2)
     except Exception as e: 
         LOGGER.warning(e)
         #raise e
@@ -42,7 +43,7 @@ async def test_vbus_pub(to, msg, url, loop, user="anonymous", pwd="anonymous"):
     nc = NATS()
     LOGGER.debug("test pub to: " + url + " with user: " + user + " and pwd: " + pwd)
     try:
-        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=2, max_reconnect_attempts=2)
+        await nc.connect(url, loop=loop, user=user, password=pwd, connect_timeout=1, max_reconnect_attempts=2)
     except Exception as e: 
         LOGGER.warning(e)
         #raise e
@@ -107,6 +108,10 @@ class Client(NATS):
 
         self._loop =  loop or asyncio.get_event_loop()
 
+        # hostname = socket.gethostname()
+        bus = SystemBus()
+        hostname = bus.get('io.veea.VeeaHub.Info').hostname()
+
         rootfolder = os.environ['VBUS_PATH']
         if rootfolder == "":
             rootfolder = os.environ['HOME']
@@ -126,7 +131,7 @@ class Client(NATS):
             self.element["element"] = {}
             self.element["element"]["path"] = id
             self.element["element"]["name"] = id
-            hostname = socket.gethostname()
+            
             self.element["element"]["host"] = hostname
             self.element["element"]["uuid"] = hostname + "." + id
             self.element["element"]["bridge"] = "None"
@@ -170,7 +175,7 @@ class Client(NATS):
         # find vbus server  - strategy 3: try default url nats://hostname:21400
         if self.element["vbus"]["url"] == None:
             hostname = socket.gethostname()
-            default_vbus_url = "nats://" + hostname + ":21400"
+            default_vbus_url = "nats://" + hostname + ".veeamesh.local:21400"
             if await test_vbus_url(default_vbus_url, self._loop) == True:
                 LOGGER.debug("url from default ok: " + default_vbus_url)
                 self.element["vbus"]["url"] = default_vbus_url
@@ -231,7 +236,7 @@ class Client(NATS):
         await asyncio.sleep(1, loop=loop)
 
         try:
-            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=2, max_reconnect_attempts=2,closed_cb=self.close)
+            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=1, max_reconnect_attempts=2,closed_cb=self.close)
         except Exception as e: 
             LOGGER.error(e)
             LOGGER.error("user not recognised by system")
