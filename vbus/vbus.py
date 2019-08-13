@@ -110,7 +110,7 @@ class Client(NATS):
 
         # hostname = socket.gethostname()
         bus = SystemBus()
-        hostname = bus.get('io.veea.VeeaHub.Info').hostname()
+        hostname = bus.get('io.veea.VeeaHub.Info').Hostname()
 
         rootfolder = os.environ['VBUS_PATH']
         if rootfolder == "":
