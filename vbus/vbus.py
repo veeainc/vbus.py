@@ -174,7 +174,6 @@ class Client(NATS):
 
         # find vbus server  - strategy 3: try default url nats://hostname:21400
         if self.element["vbus"]["url"] == None:
-            hostname = socket.gethostname()
             default_vbus_url = "nats://" + hostname + ".veeamesh.local:21400"
             if await test_vbus_url(default_vbus_url, self._loop) == True:
                 LOGGER.debug("url from default ok: " + default_vbus_url)
