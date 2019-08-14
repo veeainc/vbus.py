@@ -145,6 +145,10 @@ class Client(NATS):
             self.element["auth"]["permissions"] = {}
             self.element["auth"]["permissions"]["subscribe"] = []
             self.element["auth"]["permissions"]["publish"] = []
+            self.element["auth"]["permissions"]["subscribe"].append(id + ".>")
+            self.element["auth"]["permissions"]["subscribe"].append(hostname + "." + id + ".>")
+            self.element["auth"]["permissions"]["publish"].append(id + ".>")
+            self.element["auth"]["permissions"]["publish"].append(hostname + "." + id + ".>")
             self.element["private"] = {}
             self.element["private"]["key"] = password
 
