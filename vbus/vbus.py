@@ -239,7 +239,7 @@ class Client(NATS):
         await asyncio.sleep(1, loop=loop)
 
         try:
-            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=1, max_reconnect_attempts=2,closed_cb=self.close)
+            await self.connect(self.element["vbus"]["url"], io_loop=self._loop, user=self.element["auth"]["user"], password=self.element["private"]["key"], connect_timeout=1, max_reconnect_attempts=2, name=self.element["auth"]["user"], closed_cb=self.close)
         except Exception as e: 
             LOGGER.error(e)
             LOGGER.error("user not recognised by system")
