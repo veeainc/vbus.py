@@ -68,7 +68,7 @@ def zeroconf_search():
             info = zeroconf.get_service_info(service_type, name)
             LOGGER.debug("Service %s added, service info: %s" % (name, info))
             LOGGER.debug("Address: %s:%d" % (socket.inet_ntoa(cast(bytes, info.address)), cast(int, info.port)))
-            if "vbus"==name:
+            if "vbus"==name.split(".")[0]:
             # next step compare host_name to choose the same one than the service if available
                 LOGGER.debug("vbus found !!")
                 if z_vbus_url == "":
