@@ -259,14 +259,16 @@ class Client(NATS):
         except:
             LOGGER.error("Flush error")
 
-    async def List(self, filter_json):
-        try:
-            response = await self.request("system.db.getelementlist", filter_json, 1)
-            LOGGER.debug("Received response: {message}".format(
-                message=response.data.decode()))
-        except ErrTimeout:
-            LOGGER.warning("Request timed out")
-            
+    async def List(self, filter=None) -> any:
+        """ List database elements.
+            :param filter: The filter to use (python object)
+            :return: Device list as a python object
+        """
+        response = await self.request("system.db.getelementlist", json.dumps(filter).encode('utf-8'), 1)
+        LOGGER.debug("Received response: {message}".format(
+            message=response.data.decode()))
+        return json.loads(response.data.decode('utf8'))
+        LOGGER.debug("Received response: {message}".format(message=response.data.decode()))
         return response.data
 
     async def Permission_Subscribe(self, permission):
