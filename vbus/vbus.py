@@ -260,15 +260,14 @@ class Client(NATS):
             LOGGER.error("Flush error")
 
     async def List(self, filter_json):
-        message = None
         try:
-            response = await self.request("system.db.getElementList", filter_json, 1)
+            response = await self.request("system.db.getelementlist", filter_json, 1)
             LOGGER.debug("Received response: {message}".format(
                 message=response.data.decode()))
         except ErrTimeout:
             LOGGER.warning("Request timed out")
             
-        return message
+        return response.data
 
     async def Permission_Subscribe(self, permission):
         exist = False
