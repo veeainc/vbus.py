@@ -268,8 +268,12 @@ class Client(NATS):
         LOGGER.debug("Received response: {message}".format(
             message=response.data.decode()))
         return json.loads(response.data.decode('utf8'))
+
+    async def Get_Element_By_Uuid(self, uuid: str) -> bytes:
+        """ Retrieve a db element by uuid."""
+        response = await self.request("system.db.getelement", ('{"uuid": "%s"}' % uuid).encode('utf-8'))
         LOGGER.debug("Received response: {message}".format(message=response.data.decode()))
-        return response.data
+        return json.loads(response.data.decode('utf8'))
 
     async def Permission_Subscribe(self, permission):
         exist = False
