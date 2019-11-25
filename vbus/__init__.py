@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import bcrypt
 import asyncio
@@ -6,7 +7,10 @@ import logging
 from typing import Dict
 from nats.aio.client import Client
 
+from vbus.utils import from_vbus
 from .system import get_hostname
+from .services import VBusServices
+from .client import ExtendedClient
 
 LOGGER = logging.getLogger(__name__)
 
@@ -15,20 +19,39 @@ VBUS_PATH = 'VBUS_PATH'
 VBUS_URL = 'VBUS_URL'
 
 
-class VBusClient:
+class VBusClient(ExtendedClient):
     def __init__(self, app_domain: str, app_id: str, loop=None):
-        self._element_handlers: Dict[str, any] = {}
         self._app_domain = app_domain
         self._app_id = app_id
         self._id = f"{app_domain}.{app_id}"
         self._loop = loop or asyncio.get_event_loop()
-        self._hostname: str = ""
+        self._hostname: str = get_hostname()
+        self._root_path = f"{self._id}.{self._hostname}"
         self._env = self._read_env_vars()
         self._root_folder = self._env[VBUS_PATH]
         if not self._root_folder:
             self._root_folder = self._env['HOME']
             self._root_folder = self._root_folder + "/vbus/"
         self._nats = Client()
+        # plugins
+        self._plugin_params = [self._nats, self._id, self._hostname]
+        self._plugins = {}
+
+    @property
+    def nats(self) -> Client:
+        return self._nats
+
+    @property
+    def hostname(self) -> str:
+        return self._hostname
+
+    @property
+    def id(self) -> str:
+        return self.id
+
+    @property
+    def services(self) -> VBusServices:
+        return self._plugins.setdefault("services", VBusServices(*self._plugin_params))
 
     @staticmethod
     def _read_env_vars():
@@ -39,7 +62,6 @@ class VBusClient:
         }
 
     async def async_connect(self):
-        self._hostname = get_hostname()
         config = self._read_or_create_config_file()
         server_url = await self._find_vbus_url(config)
         config["vbus"]["url"] = server_url
@@ -116,9 +138,6 @@ class VBusClient:
             return False
         else:
             return True
-
-    def on_get_nodes(self, node_type: str, callback):
-        self._element_handlers[f"{ELEMENT_NODES}.{node_type}"] = callback
 
     def _read_or_create_config_file(self) -> Dict:
         from .helpers import generate_password
