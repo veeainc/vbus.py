@@ -1,0 +1,12 @@
+{
+    "title": "Generic node",
+    "description": "This is a raw element, with the lowest abstraction",
+    "type": "object",
+    "properties": {
+        "uuid": {"type":  "string"},
+        "version": {"type":  "string", "description": "the version of this schema"},
+        "host": {"type":  "string"},
+        "bridge": {"type": "string"}
+    },
+    "required": ["uuid", "version", "host", "bridge"]
+}

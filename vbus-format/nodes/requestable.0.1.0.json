@@ -1,0 +1,10 @@
+{
+    "description": "Represents any object where we can subscribe on",
+    "type": "object",
+    "properties": {
+        "path": {"type":  "string", "description": "The path where to request"},
+        "input_schema": {},
+        "output_schema": {}
+    },
+    "required": ["path", "input_schema", "output_schema"]
+}
