@@ -1,10 +1,11 @@
 import inspect
 from typing import Callable, Dict
-from nats.aio.client import Client
+from jsonschema import validate
 from .utils import from_vbus, to_vbus, is_sequence
+from .client import ExtendedNatsClient
 
 
-class VBusServices:
+class VBusMethods:
     # Convert a Python type to a Json Schema one.
     py_types_to_json_schema = {
         str: "string",
@@ -14,21 +15,20 @@ class VBusServices:
         None: "null",
     }
 
-    def __init__(self, nats: Client, app_id: str, hostname: str):
+    def __init__(self, nats: ExtendedNatsClient):
         self._nats = nats
-        self._app_id = app_id
-        self._hostname = hostname
         self._registry = {}
         self._initialized = False
 
     async def async_initialize(self):
         if self._initialized:
             return
-        await self._nats.subscribe("services", cb=self._async_handle_get_services)
+        await self._nats.async_subscribe("methods", cb=self._async_on_get_methods)
+        await self._nats.async_subscribe("methods", "*", cb=self._async_on_get_method)
         self._initialized = True
 
     async def async_register(self, callback: Callable):
-        """ Register a new callback as a service.
+        """ Register a new callback as a method.
             The callback must be annotated with Python type.
             See: https://docs.python.org/3/library/typing.html
 
@@ -39,9 +39,6 @@ class VBusServices:
         self._validate_callback(callback)
         self._registry[callback.__name__] = callback
         await self.async_initialize()
-        await self._nats.subscribe(
-            f"{self._app_id}.{self._hostname}.services.{callback.__name__}",
-            cb=self._async_handle_service_publish)
 
     @staticmethod
     def _validate_callback(callback: Callable):
@@ -52,28 +49,23 @@ class VBusServices:
             if arg not in inspection.annotations:
                 raise ValueError("you must annotate your callback with type annotation (see "
                                  "https://docs.python.org/3/library/typing.html).")
-            if inspection.annotations[arg] not in VBusServices.py_types_to_json_schema:
+            if inspection.annotations[arg] not in VBusMethods.py_types_to_json_schema:
                 raise ValueError(str(inspection.annotations[arg]) + " is not a supported python type.")
 
         if 'return' not in inspection.annotations:
             raise ValueError("you must annotate return value, even if its None.")
 
-    async def _async_handle_service_publish(self, msg):
-        callback_name = msg.subject.split(".")[-1]
-
-        if callback_name in self._registry:
-            args = from_vbus(msg.data)
-
+    async def _async_on_get_method(self, args, method_name: str):
+        if method_name in self._registry:
             if is_sequence(args):
-                ret = self._registry[callback_name](*args)
+                return await self._registry[method_name](*args)
             else:
-                ret = self._registry[callback_name](args)
-            await self._nats.publish(msg.reply, to_vbus(ret))
+                return await self._registry[method_name](args)
 
-    async def _async_handle_get_services(self, msg):
-        await self._nats.publish(msg.reply, to_vbus(self.to_services()))
+    async def _async_on_get_methods(self, msg):
+        await self._nats.async_publish(msg.reply, self.get_methods())
 
-    def to_service(self, name: str) -> Dict:
+    def get_method(self, name: str) -> Dict:
         inspection = inspect.getfullargspec(self._registry[name])
         ann = inspection.annotations
 
@@ -86,13 +78,47 @@ class VBusServices:
         return_schema = {"type": self.py_types_to_json_schema[ann['return']]}
 
         return {
-            "name": name,
-            "host": self._hostname,
-            "bridge": self._app_id,
+            "host": self._nats.hostname,
+            "bridge": self._nats.id,
             "version": "0.1.0",
             "params": params_schema,
             "returns": return_schema,
         }
 
-    def to_services(self):
-        return [self.to_service(n) for n in self._registry.keys()]
+    def get_methods(self):
+        return {n: self.get_method(n) for n in self._registry.keys()}
+
+
+class VBusMethodsClient:
+    def __init__(self, nats: ExtendedNatsClient, methods_def: Dict):
+        self._nats = nats
+        self._methods_def = methods_def
+
+    def __getattr__(self, attr: str):
+        if attr in self._methods_def:
+            method = self._methods_def[attr]
+            # return a wrapper to capture args
+            params_schema = method["params"]
+
+            async def wrapper(*args, timeout: int = 0.5):
+                # validate args against json schema
+                validate(list(args), schema=params_schema)
+                # make nats request
+                return await self._nats.async_request(f"{method['bridge']}.{method['host']}.methods.{attr}", args, timeout=timeout)
+            return wrapper
+        else:
+            raise ValueError("method does not exist on remote bridge. Available methods are: " +
+                             ", ".join(self._methods_def.keys()))
+
+
+
+
+
+
+
+
+
+
+
+
+

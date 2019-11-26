@@ -1,34 +1,35 @@
 from typing import Dict, Callable
+from .client import ExtendedNatsClient
 
-from vbus.utils import to_vbus
-from .client import ExtendedClient
+
+OnGetNodeCallback = Callable[[str or None], any]
 
 
 class VBusNodes:
-    def __init__(self, client: ExtendedClient):
+    def __init__(self, client: ExtendedNatsClient):
         self._client = client
         self._initialized = False
-        self._registry: Dict[str, Callable] = {}
+        self._on_get_nodes: OnGetNodeCallback = lambda uuid: {}  # by default empty response
 
     async def async_initialize(self):
         if self._initialized:
             return
-        await self._client.async_subscribe("nodes", "*", cb=self._async_get_nodes)
-        await self._client.async_subscribe("nodes", "*", "*", cb=self._async_get_node)
+        await self._client.async_subscribe("nodes", cb=self._async_get_nodes)
+        await self._client.async_subscribe("nodes", "*", cb=self._async_get_node)
         self._initialized = True
 
-    async def _async_get_nodes(self, data, reply: str, node_type: str):
+    async def _async_get_nodes(self, data, reply: str):
         """ Get all nodes. """
-        if node_type in self._registry:
-            await self._client.nats.publish(reply, to_vbus(self._registry[node_type]()))
+        return self._on_get_nodes(None)
 
-    async def _async_get_node(self, data, reply: str, node_type: str, node_uuid: str):
+    async def _async_get_node(self, data, reply: str, node_uuid: str):
         """ Get one node. """
-        if node_type in self._registry:
-            await self._client.nats.publish(reply, to_vbus(self._registry[node_type](node_uuid)))
+        return self._on_get_nodes(node_uuid)
 
-    async def async_on_get_nodes(self, nodes: str, callback: Callable):
+    async def async_on_get_nodes(self, callback: OnGetNodeCallback):
         await self.async_initialize()
-        self._registry[nodes] = callback
+        self._on_get_nodes = callback
 
+    def get_nodes(self):
+        return self._on_get_nodes(None)  # get all
 

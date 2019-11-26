@@ -23,6 +23,7 @@ setup(
           'zeroconf',
           'bcrypt',
           'pydbus',
+          'jsonschema',
           'asyncio-nats-client'
       ],
 )
