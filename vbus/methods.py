@@ -1,11 +1,11 @@
 import inspect
-from typing import Callable, Dict
 from jsonschema import validate
-from .utils import from_vbus, to_vbus, is_sequence
-from .client import ExtendedNatsClient
+from typing import Callable, Dict
+from .nats import ExtendedNatsClient
+from .helpers import is_sequence
 
 
-class VBusMethods:
+class MethodManager:
     # Convert a Python type to a Json Schema one.
     py_types_to_json_schema = {
         str: "string",
@@ -18,14 +18,10 @@ class VBusMethods:
     def __init__(self, nats: ExtendedNatsClient):
         self._nats = nats
         self._registry = {}
-        self._initialized = False
 
     async def async_initialize(self):
-        if self._initialized:
-            return
         await self._nats.async_subscribe("methods", cb=self._async_on_get_methods)
-        await self._nats.async_subscribe("methods", "*", cb=self._async_on_get_method)
-        self._initialized = True
+        await self._nats.async_subscribe("methods.*", cb=self._async_on_get_method)
 
     async def async_register(self, callback: Callable):
         """ Register a new callback as a method.
@@ -38,7 +34,6 @@ class VBusMethods:
         """
         self._validate_callback(callback)
         self._registry[callback.__name__] = callback
-        await self.async_initialize()
 
     @staticmethod
     def _validate_callback(callback: Callable):
@@ -49,7 +44,7 @@ class VBusMethods:
             if arg not in inspection.annotations:
                 raise ValueError("you must annotate your callback with type annotation (see "
                                  "https://docs.python.org/3/library/typing.html).")
-            if inspection.annotations[arg] not in VBusMethods.py_types_to_json_schema:
+            if inspection.annotations[arg] not in MethodManager.py_types_to_json_schema:
                 raise ValueError(str(inspection.annotations[arg]) + " is not a supported python type.")
 
         if 'return' not in inspection.annotations:
@@ -89,7 +84,7 @@ class VBusMethods:
         return {n: self.get_method(n) for n in self._registry.keys()}
 
 
-class VBusMethodsClient:
+class RemoteMethods:
     def __init__(self, nats: ExtendedNatsClient, methods_def: Dict):
         self._nats = nats
         self._methods_def = methods_def
@@ -104,21 +99,10 @@ class VBusMethodsClient:
                 # validate args against json schema
                 validate(list(args), schema=params_schema)
                 # make nats request
-                return await self._nats.async_request(f"{method['bridge']}.{method['host']}.methods.{attr}", args, timeout=timeout)
+                return await self._nats.async_request(f"{method['bridge']}.{method['host']}.methods.{attr}", args,
+                                                      timeout=timeout)
             return wrapper
         else:
             raise ValueError("method does not exist on remote bridge. Available methods are: " +
                              ", ".join(self._methods_def.keys()))
-
-
-
-
-
-
-
-
-
-
-
-
 

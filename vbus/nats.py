@@ -1,16 +1,13 @@
 import re
 import os
 import json
+import bcrypt
 import logging
 import asyncio
 from typing import Dict
-from functools import partialmethod
-
-import bcrypt
 from nats.aio.client import Client
 
-from vbus.utils import to_vbus, from_vbus
-from .system import get_hostname
+from .helpers import get_hostname, to_vbus, from_vbus
 
 ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
@@ -187,15 +184,15 @@ class ExtendedNatsClient:
         with open(config_file, 'w+') as f:
             json.dump(config, f)
 
-    async def async_subscribe(self, *args, cb, with_id: bool = True, with_host: bool = True):
+    async def async_subscribe(self, path, cb, with_id: bool = True, with_host: bool = True) -> int:
         """ Utility method that automatically parse subject wildcard to arguments and
             if a value is returned, publish this value on the reply subject.
 
-            :param args: Path segment
+            :param path: Path
+            :param cb: The handler
             :param with_id: Prepend the app id without host
             :param with_host: Prepend full root app_id + host
-            :param cb: The handler
-            :return:
+            :return: nats sid
 
             :example:
             async def handler(data, reply, e_id, c_id):
@@ -204,11 +201,7 @@ class ExtendedNatsClient:
 
             await async_subscribe("zigbee", "endpoints", "*", "clusters", "*", cb=handler)
         """
-        path = '.'.join(args)
-        if with_host:
-            path = '.'.join(filter(None, [self.hostname, path]))
-        if with_id:
-            path = '.'.join(filter(None, [self.id, path]))
+        path = self._get_path(path, with_id, with_host)
         # create a regex that capture wildcard
         regex = path.replace(".", r"\.").replace("*", r"([^.]+)")
 
@@ -219,11 +212,20 @@ class ExtendedNatsClient:
                 if ret and msg.reply:
                     await self._nats.publish(msg.reply, to_vbus(ret))
 
-        await self.nats.subscribe(path, cb=on_data)
+        return await self.nats.subscribe(path, cb=on_data)
 
-    async def async_request(self, path: str, data: any, timeout: int = 0.5) -> any:
+    def _get_path(self, path: str, with_id: bool, with_host: bool):
+        if with_host:
+            path = '.'.join(filter(None, [self.hostname, path]))
+        if with_id:
+            path = '.'.join(filter(None, [self.id, path]))
+        return path
+
+    async def async_request(self, path: str, data: any, timeout: int = 0.5, with_id: bool = True, with_host: bool = True) -> any:
+        path = self._get_path(path, with_id, with_host)
         msg = await self._nats.request(path, to_vbus(data), timeout=timeout)
         return from_vbus(msg.data)
 
-    async def async_publish(self, path: str, data: any):
+    async def async_publish(self, path: str, data: any, with_id: bool = True, with_host: bool = True):
+        path = self._get_path(path, with_id, with_host)
         await self._nats.publish(path, to_vbus(data))

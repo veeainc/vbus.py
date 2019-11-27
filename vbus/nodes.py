@@ -1,35 +1,112 @@
-from typing import Dict, Callable
-from .client import ExtendedNatsClient
+import logging
+from typing import Dict, Callable, List
+from .nats import ExtendedNatsClient
+
+LOGGER = logging.getLogger(__name__)
 
 
 OnGetNodeCallback = Callable[[str or None], any]
 
 
-class VBusNodes:
+class Node:
+    def __init__(self):
+        self.on_publish: Callable[[str, any], None] = lambda p, v: None
+
+    """ Base class to create custom nodes. """
+    def get_uuid(self) -> str:
+        """ Get node unique identifier as string. """
+        raise NotImplementedError()
+
+    async def to_definition(self) -> Dict:
+        """ Returns node attributes. """
+        raise NotImplementedError()
+
+    def get_readable_paths(self) -> Dict[str, Callable]:
+        """ Returns a dictionary with path as key and action as value (callable).
+            The path implicitly starts with <domain>.<app_name>.<host>.nodes.<node_uuid>.<your_path>
+
+            Each wildcard are automatically mapped to a function parameter as shown below.
+
+            :example:
+            async def _async_on_attribute_read(self, cluster_id, attr_id):
+                return self._clusters[cluster_id][attr_id]
+
+            async def _async_on_command_call(self, cluster_id, cmd_id):
+                pass
+
+            def get_readable_paths(self):
+                return {
+                    "clusters.*.attributes.*": self._async_on_attribute_read,
+                    "clusters.*.commands.*": self._async_on_command_call,
+                }
+        """
+        raise NotImplementedError()
+
+    async def push_value(self, path: str, value: any):
+        await self.on_publish(".".join([self.get_uuid(), path]), value)
+
+
+class NodesManager:
+    """ This is the VBus nodes manager.
+        It manage node lifecycle.
+        """
     def __init__(self, client: ExtendedNatsClient):
         self._client = client
-        self._initialized = False
-        self._on_get_nodes: OnGetNodeCallback = lambda uuid: {}  # by default empty response
+        self._nodes: Dict[str, Node] = {}  # contains node by uuid
+        self._node_sid: Dict[str, List[int]] = {}  # contains node Nats subscribe id
 
-    async def async_initialize(self):
-        if self._initialized:
-            return
-        await self._client.async_subscribe("nodes", cb=self._async_get_nodes)
-        await self._client.async_subscribe("nodes", "*", cb=self._async_get_node)
-        self._initialized = True
+    async def initialize(self):
+        await self._client.async_subscribe("nodes", cb=self._nats_get_nodes)
+        await self._client.async_subscribe("nodes.*", cb=self._nats_get_node)
 
-    async def _async_get_nodes(self, data, reply: str):
+    async def _nats_get_nodes(self, data, reply: str):
         """ Get all nodes. """
-        return self._on_get_nodes(None)
+        return [n.to_definition() for n in self._nodes.values()]
 
-    async def _async_get_node(self, data, reply: str, node_uuid: str):
+    async def _nats_get_node(self, data, reply: str, node_uuid: str):
         """ Get one node. """
-        return self._on_get_nodes(node_uuid)
+        if node_uuid not in self._nodes:
+            LOGGER.warning("trying to get unknown node: %s", node_uuid)
+            return {}
+        else:
+            return self._nodes[node_uuid].to_definition()
 
-    async def async_on_get_nodes(self, callback: OnGetNodeCallback):
-        await self.async_initialize()
-        self._on_get_nodes = callback
+    async def add(self, node: Node):
+        """ Add a new node. """
+        if node.get_uuid() not in self._nodes:
+            await self._register_node(node)
+        else:
+            LOGGER.warning("overriding existing node: %s", node.get_uuid())
+            await self._unregister_node(node)
+            await self._register_node(node)
 
-    def get_nodes(self):
-        return self._on_get_nodes(None)  # get all
+    async def remove(self, node_uuid: str):
+        if node_uuid not in self._nodes:
+            await self._unregister_node(self._nodes[node_uuid])
+        else:
+            LOGGER.warning("trying to remove unknown node: %s", node_uuid)
+
+    async def _unregister_node(self, node: Node):
+        # unsubscribe all path
+        if node.get_uuid() in self._node_sid:
+            for sid in self._node_sid[node.get_uuid()]:
+                await self._client.nats.unsubscribe(sid)
+        node.on_publish = None
+        del self._nodes[node.get_uuid()]
+
+    async def _register_node(self, node: Node):
+        self._node_sid.get(node.get_uuid(), [])  # create sid default list
+
+        for path, async_handler in node.get_readable_paths():
+            sid = await self._client.async_subscribe(node.get_uuid(), cb=async_handler)
+            self._node_sid[node.get_uuid()].append(sid)
+
+        node.on_publish = self._on_publish
+        self._nodes[node.get_uuid()] = node
+
+    async def _on_publish(self, path: str, value):
+        await self._client.async_publish(path, value)
+
+    async def get_nodes(self):
+        return [await n.to_definition() for n in self._nodes.values()]
 
