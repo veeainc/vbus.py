@@ -46,7 +46,55 @@ class Node:
         await self.on_publish(".".join([self.get_uuid(), path]), value)
 
 
-class NodesManager:
+class RemoteNode:
+    def __init__(self, nats: ExtendedNatsClient, node_def: Dict):
+        self._nats = nats
+        self._node_def = node_def
+
+    @property
+    def uuid(self) -> str:
+        return self._node_def["uuid"]
+
+    @property
+    def raw(self) -> Dict:
+        return self._node_def
+
+    async def publish(self, *args, data: any) -> None:
+        path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
+        path_segment.extend([str(a) for a in args])
+        await self._nats.async_publish(".".join(path_segment), data, with_host=False, with_id=False)
+
+    async def request(self, *args, data: any) -> any:
+        path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
+        path_segment.extend([str(a) for a in args])
+        return await self._nats.async_request(".".join(path_segment), data, with_host=False, with_id=False)
+
+    async def subscribe(self, *args, data: any):
+        path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
+        path_segment.extend([str(a) for a in args])
+        await self._nats.async_subscribe(".".join(path_segment), data, with_host=False, with_id=False)
+
+    def __getitem__(self, attr: str):
+        return self._node_def[attr]
+
+
+class RemoteNodeManager:
+    """ Manages remote nodes (nodes located on a remote bridge). """
+    def __init__(self, nats: ExtendedNatsClient, nodes_def: Dict):
+        self._nats = nats
+        self._nodes_def = nodes_def
+
+    def list(self) -> List[RemoteNode]:
+        return [RemoteNode(self._nats, n) for n in self._nodes_def.values()]
+
+    def get(self, node_uuid: str) -> RemoteNode or None:
+        if node_uuid in self._nodes_def:
+            return RemoteNode(self._nats, self._nodes_def[node_uuid])
+        else:
+            return None
+
+
+class NodeManager:
     """ This is the VBus nodes manager.
         It manage node lifecycle.
         """
@@ -108,5 +156,5 @@ class NodesManager:
         await self._client.async_publish(path, value)
 
     async def get_nodes(self):
-        return [await n.to_definition() for n in self._nodes.values()]
+        return {n.get_uuid(): await n.to_definition() for n in self._nodes.values()}
 

@@ -84,7 +84,7 @@ class MethodManager:
         return {n: self.get_method(n) for n in self._registry.keys()}
 
 
-class RemoteMethods:
+class RemoteMethodManager:
     def __init__(self, nats: ExtendedNatsClient, methods_def: Dict):
         self._nats = nats
         self._methods_def = methods_def
@@ -100,7 +100,7 @@ class RemoteMethods:
                 validate(list(args), schema=params_schema)
                 # make nats request
                 return await self._nats.async_request(f"{method['bridge']}.{method['host']}.methods.{attr}", args,
-                                                      timeout=timeout)
+                                                      timeout=timeout, with_id=False, with_host=False)
             return wrapper
         else:
             raise ValueError("method does not exist on remote bridge. Available methods are: " +
