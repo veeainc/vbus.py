@@ -17,11 +17,11 @@ class Node:
         """ Get node unique identifier as string. """
         raise NotImplementedError()
 
-    async def to_definition(self) -> Dict:
+    async def get_attributes(self) -> Dict:
         """ Returns node attributes. """
         raise NotImplementedError()
 
-    def get_readable_paths(self) -> Dict[str, Callable]:
+    def get_subscriptions(self) -> Dict[str, Callable]:
         """ Returns a dictionary with path as key and action as value (callable).
             The path implicitly starts with <domain>.<app_name>.<host>.nodes.<node_uuid>.<your_path>
 
@@ -42,8 +42,8 @@ class Node:
         """
         raise NotImplementedError()
 
-    async def push_value(self, path: str, value: any):
-        await self.on_publish(".".join([self.get_uuid(), path]), value)
+    async def publish(self, path: str, value: any):
+        await self.on_publish(".".join(['nodes', self.get_uuid(), path]), value)
 
 
 class RemoteNode:
@@ -69,10 +69,10 @@ class RemoteNode:
         path_segment.extend([str(a) for a in args])
         return await self._nats.async_request(".".join(path_segment), data, with_host=False, with_id=False)
 
-    async def subscribe(self, *args, data: any):
+    async def subscribe(self, *args, cb: Callable):
         path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
         path_segment.extend([str(a) for a in args])
-        await self._nats.async_subscribe(".".join(path_segment), data, with_host=False, with_id=False)
+        await self._nats.async_subscribe(".".join(path_segment), cb, with_host=False, with_id=False)
 
     def __getitem__(self, attr: str):
         return self._node_def[attr]
@@ -143,10 +143,10 @@ class NodeManager:
         del self._nodes[node.get_uuid()]
 
     async def _register_node(self, node: Node):
-        self._node_sid.get(node.get_uuid(), [])  # create sid default list
+        self._node_sid.setdefault(node.get_uuid(), [])  # create sid default list
 
-        for path, async_handler in node.get_readable_paths():
-            sid = await self._client.async_subscribe(node.get_uuid(), cb=async_handler)
+        for path, async_handler in node.get_subscriptions().items():
+            sid = await self._client.async_subscribe(".".join(["nodes", node.get_uuid(), path]), cb=async_handler)
             self._node_sid[node.get_uuid()].append(sid)
 
         node.on_publish = self._on_publish
@@ -155,6 +155,15 @@ class NodeManager:
     async def _on_publish(self, path: str, value):
         await self._client.async_publish(path, value)
 
+    async def get_node_definition(self, node: Node):
+        """ Add required attributes. """
+        return {
+            "uuid": node.get_uuid(),
+            "bridge": self._client.id,
+            "host": self._client.hostname,
+            **await node.get_attributes()
+        }
+
     async def get_nodes(self):
-        return {n.get_uuid(): await n.to_definition() for n in self._nodes.values()}
+        return {n.get_uuid(): await self.get_node_definition(n) for n in self._nodes.values()}
 
