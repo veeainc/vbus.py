@@ -202,8 +202,8 @@ class ExtendedNatsClient:
             await async_subscribe("zigbee", "endpoints", "*", "clusters", "*", cb=handler)
         """
         path = self._get_path(path, with_id, with_host)
-        # create a regex that capture wildcard
-        regex = path.replace(".", r"\.").replace("*", r"([^.]+)")
+        # create a regex that capture wildcard and chevron
+        regex = path.replace(".", r"\.").replace("*", r"([^.]+)").replace(">", r"(.+)")
 
         async def on_data(msg):
             m = re.match(regex, msg.subject)

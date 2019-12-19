@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import List, Dict
 
-from .nodes import NodeManager, RemoteNodeManager
+from .nodes import NodeManager, RemoteNodeManager, Node
 from .methods import MethodManager
 from .nats import ExtendedNatsClient
 from .methods import RemoteMethodManager
@@ -33,6 +33,7 @@ class Client:
         For creating a new bridge use Bridge class. """
     def __init__(self, app_domain: str, app_id: str, loop=None):
         self._nats = ExtendedNatsClient(app_domain, app_id, loop)
+        self._nodes = NodeManager(self._nats)
         self._attributes = {}
         self._permissions = {
             "subscribe": [
@@ -55,20 +56,27 @@ class Client:
     def id(self) -> str:
         return self._nats.id
 
+    @property
+    def nodes(self) -> NodeManager:
+        return self._nodes
+
     async def async_connect(self):
         await self._nats.async_connect()
+        await self._nodes.initialize()
 
-    async def async_discover(self, domain: str, app_id: str, timeout: int = 1) -> List[RemoteBridge]:
-        bridges = []
+    async def discover(self, domain: str, app_id: str, timeout: int = 1) -> Node:
+        json_node = {}
 
         async def async_on_discover(msg):
-            bridges.append(RemoteBridge(self._nats, from_vbus(msg.data)))
+            global json_node
+            json_data = from_vbus(msg.data)
+            json_node = {**json_node, **json_data}
 
         sid = await self._nats.nats.request(f"{domain}.{app_id}", b"", expected=sys.maxsize,
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
-        return bridges
+        return Node(self._nats, json_node, f"{domain}.{app_id}")
 
     async def async_ask_subscribe_permission(self, permission):
         self._permissions["subscribe"].append(permission)
