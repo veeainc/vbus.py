@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 from abc import ABC, abstractmethod
+from collections import ChainMap
 from typing import Dict, Callable, List, Awaitable
 
 from vbus.helpers import from_vbus
@@ -19,15 +20,15 @@ class Node(ABC):
         self._nats = nats
         self._uuid = uuid
         self._parent = parent
-        self._nodes: Dict[str, Node] = {}  # contains node by uuid
+        self._children: Dict[str, Node] = {}  # contains node by uuid
 
     async def _unregister_node(self, node: 'Node'):
         await self._nats.async_publish(f"{node.base_path}.del", await node.tree)
-        del self._nodes[node.uuid]
+        del self._children[node.uuid]
 
     async def _register_node(self, node: 'Node'):
         await self._nats.async_publish(f"{node.base_path}.add", await node.tree)
-        self._nodes[node.uuid] = node
+        self._children[node.uuid] = node
 
     @property
     def uuid(self):
@@ -84,7 +85,10 @@ class CachedNode(Node):
 
     @property
     async def tree(self) -> Dict:
-        return self._node_def
+        return {
+            **self._node_def,
+            **ChainMap({k: await n.tree for k, n in self._children.items()})
+        }
 
     async def add_attribute(self, key: str, value: any) -> Node:
         if key in self._node_def:
@@ -143,38 +147,6 @@ class DynamicNode(Node):
         raise NotImplementedError("Not relevant on a dynamic node.")
 
 
-class RemoteNode:
-    def __init__(self, nats: ExtendedNatsClient, node_def: Dict):
-        self._nats = nats
-        self._node_def = node_def
-
-    @property
-    def uuid(self) -> str:
-        return self._node_def["uuid"]
-
-    @property
-    def raw(self) -> Dict:
-        return self._node_def
-
-    async def publish(self, *args, data: any) -> None:
-        path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
-        path_segment.extend([str(a) for a in args])
-        await self._nats.async_publish(".".join(path_segment), data, with_host=False, with_id=False)
-
-    async def request(self, *args, data: any) -> any:
-        path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
-        path_segment.extend([str(a) for a in args])
-        return await self._nats.async_request(".".join(path_segment), data, with_host=False, with_id=False)
-
-    async def subscribe(self, *args, cb: Callable):
-        path_segment = [self._node_def['bridge'], self._node_def['host'], 'nodes', self.uuid]
-        path_segment.extend([str(a) for a in args])
-        await self._nats.async_subscribe(".".join(path_segment), cb, with_host=False, with_id=False)
-
-    def __getitem__(self, attr: str):
-        return self._node_def[attr]
-
-
 class NodeManager(CachedNode):
     """ This is the VBus nodes manager.
         It manage node lifecycle.
@@ -182,7 +154,6 @@ class NodeManager(CachedNode):
     def __init__(self, nats: ExtendedNatsClient):
         super().__init__(nats, "", {})
         self._nats = nats
-        self._nodes: Dict[str, Node] = {}  # contains node by uuid
 
     async def initialize(self):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
@@ -192,7 +163,7 @@ class NodeManager(CachedNode):
         json_node = {}
 
         async def async_on_discover(msg):
-            global json_node
+            nonlocal json_node
             json_data = from_vbus(msg.data)
             json_node = {**json_node, **json_data}
 
@@ -201,12 +172,12 @@ class NodeManager(CachedNode):
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
-        return Node(self._nats, json_node, f"{domain}.{app_id}")
+        return CachedNode(self._nats, "", json_node)
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
         return {
-            self._nats.hostname: {n.uuid: n.tree for n in self._nodes.values()}
+            self._nats.hostname: {n.uuid: await n.tree for n in self._children.values()}
         }
 
     async def _on_get_path(self, data, path: str):
@@ -217,6 +188,6 @@ class NodeManager(CachedNode):
 
         method = parts[-1]
         if method == "get":
-            if parts[0] in self._nodes:
-                return await self._nodes[parts[0]].get(*parts[1:-1])
+            if parts[0] in self._children:
+                return await self._children[parts[0]].get(*parts[1:-1])
         return None

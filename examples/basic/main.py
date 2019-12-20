@@ -13,7 +13,11 @@ async def main():
     # node into cache
     node = await client.nodes.add("00:45:25:65:25:ff", {
         'uuid': "foo",
-        'name': "HEIMAN",
+        'name': "Heiman",
+    })
+    node2 = await client.nodes.add("00:45:25:65:25:AA", {
+        'uuid': "bar",
+        'name': "Philips",
     })
 
     await node.add_attribute("manufacturer", "Heiman")
@@ -23,6 +27,10 @@ async def main():
         }
     })
 
+    await asyncio.sleep(1)
+
+    n = await client.nodes.discover("system", "test", 2)
+    print(await n.tree)
 
     #await node.set_attribute("manufacturer", "Heiman")
     #node['foo'] = 'bar'  # add
