@@ -11,7 +11,8 @@ from .nats import ExtendedNatsClient
 
 LOGGER = logging.getLogger(__name__)
 
-OnGetNodeCallback = Callable[[str or None], any]
+# The callable user to retrieve node definition
+GetNodeDefCallable = Callable[[], Awaitable[Dict]]
 
 
 class Node(ABC):
@@ -115,13 +116,16 @@ class CachedNode(Node):
             asyncio.get_event_loop().create_task(self.add_attribute(key, value))
 
     async def add(self, key: str, node_def: Dict) -> Node:
+        """ Add a child cached node. """
         node = CachedNode(self._nats, key, node_def, self)
         await self._register_node(node)
         return node
 
-
-# The callable user to retrieve node definition
-GetNodeDefCallable = Callable[[], Awaitable[Dict]]
+    async def add_dyn(self, key: str, on_get_node: GetNodeDefCallable) -> Node:
+        """ Add a child dynamic node. """
+        node = DynamicNode(self._nats, key, on_get_node, self)
+        await self._register_node(node)
+        return node
 
 
 class DynamicNode(Node):
@@ -132,7 +136,7 @@ class DynamicNode(Node):
 
     @property
     async def tree(self) -> Dict:
-        return await self._on_get_node
+        return await self._on_get_node()
 
     async def add_attribute(self, key: str, value: any) -> Node:
         raise NotImplementedError("Not relevant on a dynamic node.")
