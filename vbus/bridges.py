@@ -1,31 +1,12 @@
 import sys
 import asyncio
 import logging
-from typing import List, Dict
 
-from .nodes import NodeManager, RemoteNodeManager, Node
-from .methods import MethodManager
+from .nodes import NodeManager, Node
 from .nats import ExtendedNatsClient
-from .methods import RemoteMethodManager
 from .helpers import from_vbus, to_vbus
 
 LOGGER = logging.getLogger(__name__)
-
-
-class RemoteBridge:
-    """ Represents a remote bridge connection. """
-    def __init__(self, client: ExtendedNatsClient, bridge_def: Dict):
-        self._client = client
-        self._methods = RemoteMethodManager(client, bridge_def["methods"])
-        self._nodes = RemoteNodeManager(client, bridge_def["nodes"])
-
-    @property
-    def methods(self):
-        return self._methods
-
-    @property
-    def nodes(self):
-        return self._nodes
 
 
 class Client:
@@ -60,7 +41,7 @@ class Client:
     def nodes(self) -> NodeManager:
         return self._nodes
 
-    async def async_connect(self):
+    async def connect(self):
         await self._nats.async_connect()
         await self._nodes.initialize()
 
@@ -85,38 +66,3 @@ class Client:
     async def async_ask_publish_permission(self, permission):
         self._permissions["publish"].append(permission)
         await self._nats.nats.publish("system.auth.addpermissions", to_vbus(self._permissions))
-
-
-class Bridge(Client):
-    """ The VBusClient allows to connect to Veea vbus. """
-    def __init__(self, app_domain: str, app_id: str, loop=None):
-        super().__init__(app_domain, app_id, loop)
-        self._methods = MethodManager(self._nats)
-        self._nodes = NodeManager(self._nats)
-
-    # override
-    async def async_connect(self):
-        await super().async_connect()
-        await self._methods.async_initialize()
-        await self._nodes.initialize()
-        await self._nats.async_subscribe("", cb=self._async_on_describe, with_host=False)
-
-    async def _async_on_describe(self, data):
-        return {
-            "host": self._nats.hostname,
-            "bridge": self._nats.id,
-            **self._attributes,
-            "methods": self.methods.get_methods(),
-            "nodes": await self.nodes.get_nodes(),
-        }
-
-    @property
-    def methods(self) -> MethodManager:
-        return self._methods
-
-    @property
-    def nodes(self) -> NodeManager:
-        return self._nodes
-
-    def set_attribute(self, key: str, value: any):
-        self._attributes[key] = value

@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.DEBUG)
 async def main():
     client = Client("system", "test")
 
-    await client.async_connect()
+    await client.connect()
 
     # node into cache
     node = await client.nodes.add("00:45:25:65:25:ff", {

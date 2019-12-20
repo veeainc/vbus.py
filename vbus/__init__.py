@@ -1,1 +1,1 @@
-from .bridges import Bridge, RemoteBridge, Client
+from .bridges import Client
