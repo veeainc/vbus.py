@@ -43,6 +43,11 @@ def to_vbus(data: any) -> bytes:
         return json.dumps(data).encode('utf-8')
 
 
+def join_path(*args: str) -> str:
+    """ Join a path and skip ampty strings. """
+    return '.'.join(filter(None, args))
+
+
 def is_sequence(obj):
     if isinstance(obj, str):
         return False
