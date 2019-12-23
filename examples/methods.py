@@ -14,7 +14,7 @@ async def main():
 
     method = await client.add_method("scan", scan)
 
-    method.set(60)
+    await method.set(60)
 
     # await asyncio.sleep(1)
     # n = await client.discover("system", "test", 2)

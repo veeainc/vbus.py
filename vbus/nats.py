@@ -221,7 +221,7 @@ class ExtendedNatsClient:
             path = '.'.join(filter(None, [self.id, path]))
         return path
 
-    async def async_request(self, path: str, data: any, timeout: int = 0.5, with_id: bool = True, with_host: bool = True) -> any:
+    async def async_request(self, path: str, data: any, timeout: float = 0.5, with_id: bool = True, with_host: bool = True) -> any:
         path = self._get_path(path, with_id, with_host)
         msg = await self._nats.request(path, to_vbus(data), timeout=timeout)
         return from_vbus(msg.data)

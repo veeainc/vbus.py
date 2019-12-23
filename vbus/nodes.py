@@ -1,14 +1,14 @@
+import sys
 import asyncio
 import inspect
 import logging
-import sys
-from abc import ABC, abstractmethod
 from collections import ChainMap
-from typing import Dict, Callable, List, Awaitable
+from abc import ABC, abstractmethod
+from typing import Dict, Callable, Awaitable, List
 
-from jsonschema import validate
-
-from vbus.helpers import from_vbus, join_path
+from vbus.builder import NodeBuilder
+from . import builder
+from .helpers import from_vbus, join_path
 from .nats import ExtendedNatsClient
 
 
@@ -16,11 +16,12 @@ LOGGER = logging.getLogger(__name__)
 
 # The callable user to retrieve node definition
 GetNodeDefCallable = Callable[[], Awaitable[Dict]]
+NodeType = Dict or builder.Node or builder.Method
 
 
-def get_path_in_dict(dict: Dict, *parts: str):
+def get_path_in_dict(d: Dict, *parts: str):
     """ Find a sub-element in a dict. """
-    root = dict
+    root = d
     for part in parts:
         if part in root:
             root = root[part]
@@ -29,30 +30,51 @@ def get_path_in_dict(dict: Dict, *parts: str):
     return root
 
 
+class AttributeProxy:
+    """ Represents remote attributes actions. """
+    def __init__(self, nats: ExtendedNatsClient, path: str):
+        self._nats = nats
+        self._path = path
+
+    async def set(self, value: any):
+        return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
+
+
+class NodeProxy:
+    """ Represents remote node actions. """
+    def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
+        self._nats = nats
+        self._path = path
+        self._node_def = node_def
+
+    async def set(self, value: any):
+        return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
+
+
+class MethodProxy:
+    """ Represents remote node actions. """
+    def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
+        self._nats = nats
+        self._path = path
+        self._node_def = node_def
+
+    async def call(self, value: any):
+        return await self._nats.async_request(self._path + ".set", value, with_host=False, with_id=False)
+
+
 class Node(ABC):
     """ Base node class. """
-    def __init__(self, nats: ExtendedNatsClient, uuid: str, parent: 'Node' = None):
+    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_builder: NodeBuilder, parent: 'Node' = None):
         self._nats = nats
         self._uuid = uuid
+        self._builder = node_builder
         self._parent = parent
         self._children: Dict[str, Node] = {}  # contains node by uuid
-
-    async def _unregister_node(self, node: 'Node'):
-        await self._nats.async_publish(join_path(node.base_path, "del"), await node.tree)
-        del self._children[node.uuid]
-
-    async def _register_node(self, node: 'Node'):
-        await self._nats.async_publish(join_path(node.base_path, "add"), await node.tree)
-        self._children[node.uuid] = node
 
     @property
     def uuid(self):
         """ Returns the node uuid. """
         return self._uuid
-
-    async def get(self, *parts: str):
-        """ Find a sub-element in node tree. """
-        return get_path_in_dict(await self.tree, *parts)
 
     @property
     def base_path(self) -> str:
@@ -69,25 +91,88 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    async def add_attribute(self, key: str, value: any) -> 'Node':
+    async def add_node(self, key: str, node_def: NodeType) -> 'Node':
         pass
 
-    @abstractmethod
-    async def set_attribute(self, key: str, value: any) -> 'Node':
+    async def async_initialize(self):
         pass
 
-    @abstractmethod
-    def __setitem__(self, key, value):
-        """ The pythonish way to set attributes. """
+    async def _unregister_node(self, node: 'Node'):
+        await self._nats.async_publish(join_path(node.base_path, "del"), await node.tree)
+        del self._children[node.uuid]
+
+    async def get(self, *parts: str):
+        """ Find a sub-element in node tree. """
+        return get_path_in_dict(await self.tree, *parts)
+
+    def get_node_builder(self, parts: List[str]):
+        if not parts:
+            return self._builder
+        else:
+            if parts[0] in self._children:
+                uuid = parts.pop(0)
+                return self._children[uuid].get_node_builder(parts)
+            else:
+                return get_path_in_dict(self._builder.definition, *parts)
+
+    async def receive_set(self, data: any, *parts: str):
+        tree = await self.tree
+        node_def = get_path_in_dict(tree, *parts)
+        if node_def:
+            if isinstance(node_def, builder.Node):
+                await node_def.on_write(data)
+
+    async def get_attribute(self, *parts: str) -> AttributeProxy or None:
+        node_builder = self.get_node_builder(list(parts))
+        if node_builder:
+            return NodeProxy(self._nats, self.base_path + "." + ".".join(parts), node_builder)
+        else:
+            return None
+
+    async def get_method(self, *parts: str) -> MethodProxy or None:
+        node_builder = self.get_node_builder(list(parts))
+        if node_builder:
+            return MethodProxy(self._nats, self.base_path + "." + ".".join(parts), node_builder)
+        else:
+            return None
+
+    async def add_method(self, uuid: str, method: Callable) -> 'MethodNode':
         pass
 
-    @abstractmethod
-    async def add(self, key: str, node_def: Dict) -> 'Node':
+    async def subscribe_set(self, path: str, callback: Callable[[], Awaitable[any]]):
         pass
 
-    ###########################################################################
-    # Methods Management                                                      #
-    ###########################################################################
+    async def handle_set(self, parts: List[str], data) -> 'Node':
+        node_builder = self.get_node_builder(parts)
+
+        if isinstance(node_builder, builder.Node):
+            return await node_builder.on_write(data)
+        elif isinstance(node_builder, builder.Method):
+            return await node_builder.method(data)
+
+
+class CachedNode(Node):
+    """ A node that store data in ram. """
+    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_builder: NodeBuilder, parent: Node = None):
+        super().__init__(nats, uuid, node_builder, parent)
+
+    @property
+    async def tree(self) -> Dict:
+        return {
+            **self._builder.to_json(),
+            **ChainMap({k: await n.tree for k, n in self._children.items()})
+        }
+
+    async def add_node(self, key: str, node_def: Dict, on_write: Callable = None) -> Node:
+        """ Add a child cached node. """
+        node_builder = builder.Node(node_def, on_write=on_write)
+        node = CachedNode(self._nats, key, node_builder, self)
+
+        # send the node definition on Vbus
+        await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
+        self._children[node.uuid] = node
+        return node
+
     async def add_method(self, uuid: str, method: Callable) -> 'MethodNode':
         """ Register a new callback as a method.
             The callback must be annotated with Python type.
@@ -97,117 +182,13 @@ class Node(ABC):
             def scan(self, time: int) -> None:
                 pass
         """
-        node = MethodNode(self._nats, uuid, method, self)
-        node.validate_callback()  # raise exception
-        await self._register_node(node)
+        node_builder = builder.Method(method)
+        node_builder.validate_callback()  # raise exception
+        node = CachedNode(self._nats, uuid, node_builder, self)
+
+        await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
+        self._children[node.uuid] = node
         return node
-
-
-class CachedNode(Node):
-    """ A node that store data in ram. """
-    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_def: Dict, parent: Node = None):
-        super().__init__(nats, uuid, parent)
-        self._node_def = node_def
-
-    @property
-    async def tree(self) -> Dict:
-        return {
-            **self._node_def,
-            **ChainMap({k: await n.tree for k, n in self._children.items()})
-        }
-
-    async def add_attribute(self, key: str, value: any) -> Node:
-        if key in self._node_def:
-            LOGGER.warning("trying to add an existing attribute, use set instead")
-            return await self.set_attribute(key, value)
-
-        self._node_def[key] = value
-        await self._nats.async_publish(join_path(self.base_path, key, 'add'), value)
-        return self
-
-    async def set_attribute(self, key: str, value: any) -> Node:
-        if key not in self._node_def:
-            LOGGER.warning("trying to set an unknown attribute, use add instead")
-            return await self.add_attribute(key, value)
-
-        self._node_def[key] = value
-        await self._nats.async_publish(f"{self.base_path}.{key}.set", value)
-        return self
-
-    def __setitem__(self, key, value):
-        if key in self._node_def:
-            asyncio.get_event_loop().create_task(self.set_attribute(key, value))
-        else:
-            asyncio.get_event_loop().create_task(self.add_attribute(key, value))
-
-    async def add(self, key: str, node_def: Dict) -> Node:
-        """ Add a child cached node. """
-        node = CachedNode(self._nats, key, node_def, self)
-        await self._register_node(node)
-        return node
-
-
-class MethodNode(Node):
-    """ A method node. """
-    def __init__(self, nats: ExtendedNatsClient, uuid: str, method: Callable, parent: Node = None):
-        super().__init__(nats, uuid, parent)
-        self._method = method
-
-    # Convert a Python type to a Json Schema one.
-    py_types_to_json_schema = {
-        str: "string",
-        int: "integer",
-        float: "number",
-        bool: "boolean",
-        None: "null",
-    }
-
-    def validate_callback(self):
-        inspection = inspect.getfullargspec(self._method)
-        for arg in inspection.args:
-            if arg == 'self':
-                continue
-            if arg not in inspection.annotations:
-                raise ValueError("you must annotate your callback with type annotation (see "
-                                 "https://docs.python.org/3/library/typing.html).")
-            if inspection.annotations[arg] not in MethodNode.py_types_to_json_schema:
-                raise ValueError(str(inspection.annotations[arg]) + " is not a supported python type.")
-
-        if 'return' not in inspection.annotations:
-            raise ValueError("you must annotate return value, even if its None.")
-
-    @property
-    async def tree(self) -> Dict:
-        inspection = inspect.getfullargspec(self._method)
-        ann = inspection.annotations
-
-        params_schema = {"type": "array", "items": []}
-        for arg in inspection.args:
-            params_schema["items"].append({
-                "type": self.py_types_to_json_schema[ann[arg]],
-                "description": arg
-            })
-        return_schema = {"type": self.py_types_to_json_schema[ann['return']]}
-
-        return {
-            "params": params_schema,
-            "returns": return_schema,
-        }
-
-    async def set(self, *args):
-        pass
-
-    async def add_attribute(self, key: str, value: any) -> Node:
-        raise NotImplementedError("Not relevant on a method node.")
-
-    async def set_attribute(self, key: str, value: any) -> Node:
-        raise NotImplementedError("Not relevant on a method node.")
-
-    def __setitem__(self, key, value):
-        raise NotImplementedError("Not relevant on a method node.")
-
-    async def add(self, key: str, node_def: Dict) -> Node:
-        raise NotImplementedError("Not relevant on a method node.")
 
 
 NodeHandler = Callable[[str or None], Awaitable[Dict]]
@@ -218,7 +199,7 @@ class NodeManager(CachedNode):
         It manage node lifecycle.
         """
     def __init__(self, nats: ExtendedNatsClient):
-        super().__init__(nats, "", {})
+        super().__init__(nats, "", builder.Node({}))
         self._nats = nats
         self._node_handler: NodeHandler = None
 
@@ -239,7 +220,8 @@ class NodeManager(CachedNode):
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
-        return CachedNode(self._nats, "", json_node)
+        node_builder = builder.Node(json_node)
+        return CachedNode(self._nats, f"{domain}.{app_id}", node_builder)
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
@@ -255,17 +237,24 @@ class NodeManager(CachedNode):
 
         method = parts[-1]
         if method == "get":
-            # try et in cached node first
+            # try get in cached node first
             if parts[0] in self._children:
                 return await self._children[parts[0]].get(*parts[1:-1])
             # try get in node_handler
-            if self._node_handler:
+            if self._node_handlesetir:
                 node = await self._node_handler(parts[0])
                 if node:
                     return get_path_in_dict(node, *parts[1:-1])
+        elif method == "set":
+            await self.handle_set(parts[:-1], data)
+            # node_uuid = parts[0]
+            # if node_uuid in self._children:
+            #     return await self._children[node_uuid].handle_set(data, parts[1:-1])
+
         return None
 
     def set_node_handler(self, node_handler: NodeHandler):
         if self._node_handler is not None:
             LOGGER.warning("overriding node handler")
         self._node_handler = node_handler
+
