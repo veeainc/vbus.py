@@ -28,12 +28,13 @@ class AttributeProxy:
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
     async def subscribe_set(self, on_set: Callable):
-        sis = await self._nats.async_subscribe(self._path, cb=on_set)
+        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=on_set, with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def unsubscribe(self):
         for sid in self._sids:
             await self._nats.nats.unsubscribe(sid)
+
 
 class NodeProxy:
     """ Represents remote node actions. """
@@ -62,7 +63,13 @@ class NodeProxy:
 
     async def get_attribute(self, *parts: str) -> AttributeProxy:
         # TODO: check existence or retrieve
-        return AttributeProxy(self._nats, join_path(parts))
+        return AttributeProxy(self._nats, join_path(self._path, *parts))
+
+    async def get_node(self, *parts: str) -> 'NodeProxy' or None:
+        n = get_path_in_dict(self._node_json, *parts)
+        if n:
+            return NodeProxy(self._nats, join_path(self._path, *parts), n)
+        return None
 
     def __getitem__(self, item):
         return self._node_json[item]
@@ -141,7 +148,7 @@ class Node(ABC):
             return await node_builder.handle_set(data, parts)
 
     async def set(self, path: str, value: any):
-        await self._nats.async_publish(".".join([self.base_path, path]), value)
+        await self._nats.async_publish(join_path(self.base_path, path, "set"), value)
 
 
 class CachedNode(Node):
