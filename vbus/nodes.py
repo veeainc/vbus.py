@@ -22,10 +22,18 @@ class AttributeProxy:
     def __init__(self, nats: ExtendedNatsClient, path: str):
         self._nats = nats
         self._path = path
+        self._sids = []
 
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
+    async def subscribe_set(self, on_set: Callable):
+        sis = await self._nats.async_subscribe(self._path, cb=on_set)
+        self._sids.append(sis)
+
+    async def unsubscribe(self):
+        for sid in self._sids:
+            await self._nats.nats.unsubscribe(sid)
 
 class NodeProxy:
     """ Represents remote node actions. """
@@ -41,8 +49,23 @@ class NodeProxy:
         else:
             return None
 
+    @property
+    def path(self):
+        return self._path
+
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
+
+    def items(self):
+        for k, v in self._node_json.items():
+            yield k, NodeProxy(self._nats, join_path(self._path, k), v)
+
+    async def get_attribute(self, *parts: str) -> AttributeProxy:
+        # TODO: check existence or retrieve
+        return AttributeProxy(self._nats, join_path(parts))
+
+    def __getitem__(self, item):
+        return self._node_json[item]
 
 
 class MethodProxy:
