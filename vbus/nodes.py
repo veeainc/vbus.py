@@ -1,7 +1,6 @@
 import sys
 import asyncio
 import logging
-from collections import ChainMap
 from abc import ABC, abstractmethod
 from typing import Dict, Callable, Awaitable, List
 
@@ -82,6 +81,9 @@ class Node(ABC):
     async def add_node(self, key: str, node_def: NodeType) -> 'Node':
         pass
 
+    async def remove_node(self, key: str):
+        pass
+
     async def get_attribute(self, *parts: str) -> AttributeProxy or None:
         node_builder = self._builder.search(list(parts))
         if node_builder:
@@ -113,7 +115,10 @@ class Node(ABC):
     async def handle_set(self, parts: List[str], data) -> 'Node':
         node_builder = self._builder.search(parts)
         if node_builder:
-            return await node_builder.handle_set(data)
+            return await node_builder.handle_set(data, parts)
+
+    async def set(self, path: str, value: any):
+        await self._nats.async_publish(".".join([self.base_path, path]), value)
 
 
 class CachedNode(Node):
@@ -197,4 +202,3 @@ class NodeManager(CachedNode):
         if self._node_handler is not None:
             LOGGER.warning("overriding node handler")
         self._node_handler = node_handler
-

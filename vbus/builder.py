@@ -31,7 +31,7 @@ class NodeBuilder(ABC):
         self._definition[uuid] = node
 
     @abstractmethod
-    async def handle_set(self, data: any):
+    async def handle_set(self, data: any, parts: List[str]):
         pass
 
     @abstractmethod
@@ -89,7 +89,7 @@ class Method(NodeBuilder):
         if 'return' not in inspection.annotations:
             raise ValueError("you must annotate return value, even if its None.")
 
-    async def handle_set(self, data: any):
+    async def handle_set(self, data: any, parts: List[str]):
         return await self._method(data)
 
 
@@ -107,8 +107,8 @@ class Node(NodeBuilder):
     def to_json(self) -> any:
         return self._definition
 
-    async def handle_set(self, data: any):
-        return await self._on_write(data)
+    async def handle_set(self, data: any, parts: List[str]):
+        return await self._on_write(data, parts)
 
 
 class VBusBuilderEncoder(json.JSONEncoder):
