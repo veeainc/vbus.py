@@ -209,7 +209,7 @@ class ExtendedNatsClient:
             m = re.match(regex, msg.subject)
             if m:
                 ret = await cb(from_vbus(msg.data), *m.groups())
-                if ret and msg.reply:
+                if msg.reply:
                     await self._nats.publish(msg.reply, to_vbus(ret))
 
         return await self.nats.subscribe(path, cb=on_data)

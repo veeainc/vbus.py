@@ -4,17 +4,35 @@
 import json
 import inspect
 from abc import ABC, abstractmethod
-from typing import Callable, Dict
+from typing import Callable, Dict, List
 
 
 class NodeBuilder(ABC):
     """ A Json serializable class. """
     def __init__(self):
-        pass
+        self._definition = {}
 
     @property
     def definition(self) -> Dict:
-        return {}
+        return self._definition
+
+    def search(self, parts: List[str]) -> 'NodeBuilder' or None:
+        root = self.definition
+        for i, part in enumerate(parts):
+            if part in root:
+                root = root[part]
+                if i < len(parts) - 1 and isinstance(root, NodeBuilder):
+                    root = root.definition
+            else:
+                return None  # not found
+        return root
+
+    def add_node(self, uuid: str, node: 'NodeBuilder'):
+        self._definition[uuid] = node
+
+    @abstractmethod
+    async def handle_set(self, data: any):
+        pass
 
     @abstractmethod
     def to_json(self) -> any:
@@ -71,24 +89,26 @@ class Method(NodeBuilder):
         if 'return' not in inspection.annotations:
             raise ValueError("you must annotate return value, even if its None.")
 
+    async def handle_set(self, data: any):
+        return await self._method(data)
+
 
 class Node(NodeBuilder):
     """ A standard node element on which we can listen for incoming VBus events. """
     def __init__(self, node_def: Dict, on_write: Callable = lambda: None):
         super().__init__()
-        self._node_def = node_def
+        self._definition = node_def
         self._on_write = on_write
-
-    @property
-    def definition(self) -> Dict:
-        return self._node_def
 
     @property
     def on_write(self):
         return self._on_write
 
     def to_json(self) -> any:
-        return self._node_def
+        return self._definition
+
+    async def handle_set(self, data: any):
+        return await self._on_write(data)
 
 
 class VBusBuilderEncoder(json.JSONEncoder):

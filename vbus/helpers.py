@@ -45,6 +45,17 @@ def to_vbus(data: any) -> bytes:
         return json.dumps(data, cls=VBusBuilderEncoder).encode('utf-8')
 
 
+def get_path_in_dict(d: Dict, *parts: str):
+    """ Find a sub-element in a dict. """
+    root = d
+    for part in parts:
+        if part in root:
+            root = root[part]
+        else:
+            return None  # not found
+    return root
+
+
 def join_path(*args: str) -> str:
     """ Join a path and skip ampty strings. """
     return '.'.join(filter(None, args))

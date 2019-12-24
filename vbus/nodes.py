@@ -1,6 +1,5 @@
 import sys
 import asyncio
-import inspect
 import logging
 from collections import ChainMap
 from abc import ABC, abstractmethod
@@ -8,7 +7,7 @@ from typing import Dict, Callable, Awaitable, List
 
 from vbus.builder import NodeBuilder
 from . import builder
-from .helpers import from_vbus, join_path
+from .helpers import from_vbus, join_path, get_path_in_dict
 from .nats import ExtendedNatsClient
 
 
@@ -17,17 +16,6 @@ LOGGER = logging.getLogger(__name__)
 # The callable user to retrieve node definition
 GetNodeDefCallable = Callable[[], Awaitable[Dict]]
 NodeType = Dict or builder.Node or builder.Method
-
-
-def get_path_in_dict(d: Dict, *parts: str):
-    """ Find a sub-element in a dict. """
-    root = d
-    for part in parts:
-        if part in root:
-            root = root[part]
-        else:
-            return None  # not found
-    return root
 
 
 class AttributeProxy:
@@ -42,17 +30,24 @@ class AttributeProxy:
 
 class NodeProxy:
     """ Represents remote node actions. """
-    def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
+    def __init__(self, nats: ExtendedNatsClient, path: str, node_json: Dict):
         self._nats = nats
         self._path = path
-        self._node_def = node_def
+        self._node_json = node_json
+
+    async def get_method(self, *parts: str) -> 'MethodProxy' or None:
+        node_json = get_path_in_dict(self._node_json, *parts)
+        if node_json:
+            return MethodProxy(self._nats, self._path + "." + ".".join(parts), node_json)
+        else:
+            return None
 
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
 
 class MethodProxy:
-    """ Represents remote node actions. """
+    """ Represents remote method actions. """
     def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
         self._nats = nats
         self._path = path
@@ -69,7 +64,6 @@ class Node(ABC):
         self._uuid = uuid
         self._builder = node_builder
         self._parent = parent
-        self._children: Dict[str, Node] = {}  # contains node by uuid
 
     @property
     def uuid(self):
@@ -84,94 +78,23 @@ class Node(ABC):
         else:
             return self._uuid
 
-    @property
-    @abstractmethod
-    async def tree(self) -> Dict:
-        """ Returns the raw tree as a Python dictionary. """
-        pass
-
     @abstractmethod
     async def add_node(self, key: str, node_def: NodeType) -> 'Node':
         pass
 
-    async def async_initialize(self):
-        pass
-
-    async def _unregister_node(self, node: 'Node'):
-        await self._nats.async_publish(join_path(node.base_path, "del"), await node.tree)
-        del self._children[node.uuid]
-
-    async def get(self, *parts: str):
-        """ Find a sub-element in node tree. """
-        return get_path_in_dict(await self.tree, *parts)
-
-    def get_node_builder(self, parts: List[str]):
-        if not parts:
-            return self._builder
-        else:
-            if parts[0] in self._children:
-                uuid = parts.pop(0)
-                return self._children[uuid].get_node_builder(parts)
-            else:
-                return get_path_in_dict(self._builder.definition, *parts)
-
-    async def receive_set(self, data: any, *parts: str):
-        tree = await self.tree
-        node_def = get_path_in_dict(tree, *parts)
-        if node_def:
-            if isinstance(node_def, builder.Node):
-                await node_def.on_write(data)
-
     async def get_attribute(self, *parts: str) -> AttributeProxy or None:
-        node_builder = self.get_node_builder(list(parts))
+        node_builder = self._builder.search(list(parts))
         if node_builder:
             return NodeProxy(self._nats, self.base_path + "." + ".".join(parts), node_builder)
         else:
             return None
 
     async def get_method(self, *parts: str) -> MethodProxy or None:
-        node_builder = self.get_node_builder(list(parts))
+        node_builder = self._builder.search(list(parts))
         if node_builder:
             return MethodProxy(self._nats, self.base_path + "." + ".".join(parts), node_builder)
         else:
             return None
-
-    async def add_method(self, uuid: str, method: Callable) -> 'MethodNode':
-        pass
-
-    async def subscribe_set(self, path: str, callback: Callable[[], Awaitable[any]]):
-        pass
-
-    async def handle_set(self, parts: List[str], data) -> 'Node':
-        node_builder = self.get_node_builder(parts)
-
-        if isinstance(node_builder, builder.Node):
-            return await node_builder.on_write(data)
-        elif isinstance(node_builder, builder.Method):
-            return await node_builder.method(data)
-
-
-class CachedNode(Node):
-    """ A node that store data in ram. """
-    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_builder: NodeBuilder, parent: Node = None):
-        super().__init__(nats, uuid, node_builder, parent)
-
-    @property
-    async def tree(self) -> Dict:
-        return {
-            **self._builder.to_json(),
-            **ChainMap({k: await n.tree for k, n in self._children.items()})
-        }
-
-    async def add_node(self, key: str, node_def: Dict, on_write: Callable = None) -> Node:
-        """ Add a child cached node. """
-        node_builder = builder.Node(node_def, on_write=on_write)
-        node = CachedNode(self._nats, key, node_builder, self)
-
-        # send the node definition on Vbus
-        await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
-        self._children[node.uuid] = node
-        return node
 
     async def add_method(self, uuid: str, method: Callable) -> 'MethodNode':
         """ Register a new callback as a method.
@@ -182,12 +105,39 @@ class CachedNode(Node):
             def scan(self, time: int) -> None:
                 pass
         """
+        pass
+
+    async def subscribe_set(self, path: str, callback: Callable[[], Awaitable[any]]):
+        pass
+
+    async def handle_set(self, parts: List[str], data) -> 'Node':
+        node_builder = self._builder.search(parts)
+        if node_builder:
+            return await node_builder.handle_set(data)
+
+
+class CachedNode(Node):
+    """ A node that store data in ram. """
+    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_builder: NodeBuilder, parent: Node = None):
+        super().__init__(nats, uuid, node_builder, parent)
+
+    async def add_node(self, uuid: str, node_def: Dict, on_write: Callable = None) -> Node:
+        """ Add a child cached node. """
+        node_builder = builder.Node(node_def, on_write=on_write)
+        self._builder.add_node(uuid, node_builder)
+        node = CachedNode(self._nats, uuid, node_builder, self)
+
+        # send the node definition on Vbus
+        await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
+        return CachedNode(self._nats, uuid, node_builder, self)
+
+    async def add_method(self, uuid: str, method: Callable) -> 'MethodNode':
         node_builder = builder.Method(method)
         node_builder.validate_callback()  # raise exception
+        self._builder.add_node(uuid, node_builder)
         node = CachedNode(self._nats, uuid, node_builder, self)
 
         await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
-        self._children[node.uuid] = node
         return node
 
 
@@ -207,7 +157,7 @@ class NodeManager(CachedNode):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
 
-    async def discover(self, domain: str, app_id: str, timeout: int = 1) -> Node:
+    async def discover(self, domain: str, app_id: str, timeout: int = 1) -> NodeProxy:
         json_node = {}
 
         async def async_on_discover(msg):
@@ -220,13 +170,13 @@ class NodeManager(CachedNode):
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
-        node_builder = builder.Node(json_node)
-        return CachedNode(self._nats, f"{domain}.{app_id}", node_builder)
+        # node_builder = builder.Node(json_node)
+        return NodeProxy(self._nats, f"{domain}.{app_id}", json_node)
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
         return {
-            self._nats.hostname: {n.uuid: await n.tree for n in self._children.values()}
+            self._nats.hostname: self._builder.definition
         }
 
     async def _on_get_path(self, data, path: str):
@@ -237,20 +187,10 @@ class NodeManager(CachedNode):
 
         method = parts[-1]
         if method == "get":
-            # try get in cached node first
-            if parts[0] in self._children:
-                return await self._children[parts[0]].get(*parts[1:-1])
-            # try get in node_handler
-            if self._node_handlesetir:
-                node = await self._node_handler(parts[0])
-                if node:
-                    return get_path_in_dict(node, *parts[1:-1])
+            pass
+            # TODO: get path
         elif method == "set":
-            await self.handle_set(parts[:-1], data)
-            # node_uuid = parts[0]
-            # if node_uuid in self._children:
-            #     return await self._children[node_uuid].handle_set(data, parts[1:-1])
-
+            return await self.handle_set(parts[:-1], data)
         return None
 
     def set_node_handler(self, node_handler: NodeHandler):
