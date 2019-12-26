@@ -16,7 +16,7 @@ class NodeBuilder(ABC):
     def definition(self) -> Dict:
         return self._definition
 
-    def search(self, parts: List[str]) -> 'NodeBuilder' or None:
+    def search(self, parts: List[str]) -> 'NodeBuilder' or None or any:
         root = self.definition
         for i, part in enumerate(parts):
             if part in root:
