@@ -69,7 +69,7 @@ class ExtendedNatsClient:
                            user="anonymous", password="anonymous",
                            connect_timeout=1, max_reconnect_attempts=2)
         data = json.dumps(config["auth"]).encode('utf-8')
-        await nats.publish("system.auth.adduser", data)
+        await nats.publish("system.authorization." + self._hostname + ".add", data)
         await nats.flush()
         await nats.close()
         await asyncio.sleep(3)  # wait server restart
