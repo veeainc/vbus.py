@@ -14,8 +14,8 @@ async def main():
     async def on_scan(time: int) -> None:
         print("scanning...")
 
-    async def on_attribute_write(path: str):
-        print(path)
+    async def on_attribute_write(data: any, path: str):
+        print(path, data)
 
     # json-like building:
     node = await client.add_node("00:45:25:65:25:ff", {
@@ -36,12 +36,9 @@ async def main():
     await asyncio.sleep(1)
 
     nodes = await client.discover("system", "test", 2)
-
-
-
-    #attr = await nodes.get_attribute("boolangery-ThinkPad-P1-Gen-2", "00:45:25:65:25:ff", "endpoints", "1", "attributes", "1")
-    #if attr:
-    #    await attr.set(42)
+    attr = await nodes.get_attribute("boolangery-ThinkPad-P1-Gen-2", "00:45:25:65:25:ff", "endpoints", "1", "attributes", "1")
+    if attr:
+        await attr.set(42)
 
     #method = await nodes.get_method("boolangery-ThinkPad-P1-Gen-2", "00:45:25:65:25:AA", "scan")
     #if method:

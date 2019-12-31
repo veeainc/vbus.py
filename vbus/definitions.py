@@ -20,13 +20,19 @@ class Definition(ABC):
     def definition(self) -> Dict:
         return self._structure
 
-    def search(self, parts: List[str]) -> 'Definition' or None or any:
+    def search_path(self, parts: List[str]) -> 'Definition' or None or any:
+        """ Search for a path in this definition.
+            It can returns a Definition class or a dictionary or none if not found.
+        """
+        if not parts:
+            return self
+
         root = self.definition
         for i, part in enumerate(parts):
             if part in root:
                 root = root[part]
-                if i < len(parts) - 1 and isinstance(root, Definition):
-                    root = root.definition
+                if isinstance(root, Definition):
+                    return root.search_path(parts[i + 1:])
             else:
                 return None  # not found
         return root

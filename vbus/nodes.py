@@ -135,7 +135,7 @@ class Node:
 
     async def get_attribute(self, *parts: str) -> AttributeProxy or None:
         """ Retrieve an attribute proxy. """
-        node_def = self._definition.search(list(parts))
+        node_def = self._definition.search_path(list(parts))
         if node_def:
             return NodeProxy(self._nats, self.path + "." + ".".join(parts), node_def)
         else:
@@ -143,7 +143,7 @@ class Node:
 
     async def get_method(self, *parts: str) -> MethodProxy or None:
         """ Retrieve a method proxy. """
-        node_def = self._definition.search(list(parts))
+        node_def = self._definition.search_path(list(parts))
         if node_def:
             return MethodProxy(self._nats, self.path + "." + ".".join(parts), node_def)
         else:
@@ -212,12 +212,15 @@ class NodeManager(Node):
         }
 
     async def handle_set(self, parts: List[str], data) -> Node:
-        node_builder = self._definition.search(parts)
+        node_builder = self._definition.search_path(parts)
         if node_builder:
-            return await node_builder.handle_set(data, parts)
+            try:
+                return await node_builder.handle_set(data, parts)
+            except Exception as e:
+                LOGGER.exception(e)
 
     async def handle_get(self, parts: List[str]) -> Node:
-        node_builder = self._definition.search(parts)
+        node_builder = self._definition.search_path(parts)
         if node_builder:
             return node_builder
 
