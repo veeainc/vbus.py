@@ -30,6 +30,14 @@ class NodeBuilder(ABC):
     def add_node(self, uuid: str, node: 'NodeBuilder'):
         self._definition[uuid] = node
 
+    def remove_node(self, uuid: str) -> 'NodeBuilder' | None:
+        if not uuid in self._definition:
+            return None
+
+        builder = self._definition[uuid]
+        del self._definition[uuid]
+        return builder
+
     @abstractmethod
     async def handle_set(self, data: any, parts: List[str]):
         pass

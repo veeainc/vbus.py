@@ -116,8 +116,14 @@ class Node:
         await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
         return Node(self._nats, uuid, node_builder, self)
 
-    async def remove_node(self, key: str):
-        pass
+    async def remove_node(self, uuid: str):
+        node_builder = self._builder.remove_node(uuid)
+
+        if not node_builder:
+            LOGGER.warning('trying to remove unknown node: %s', uuid)
+            return
+
+        await self._nats.async_publish(join_path(self.base_path, uuid, "del"), node_builder.to_json())
 
     async def get_attribute(self, *parts: str) -> AttributeProxy or None:
         node_builder = self._builder.search(list(parts))
