@@ -37,7 +37,7 @@ def from_vbus(data: bytes) -> Dict:
 
 def to_vbus(data: any) -> bytes:
     """ Convert Python object to json as bytes. """
-    from vbus.builder import VBusBuilderEncoder
+    from vbus.definitions import VBusBuilderEncoder
 
     if data is None:
         return b''

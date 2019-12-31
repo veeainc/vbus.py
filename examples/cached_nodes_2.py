@@ -1,7 +1,7 @@
 import asyncio
 from vbus import Client
 import logging
-from vbus import builder
+from vbus import definitions
 
 
 logging.basicConfig(level=logging.DEBUG)

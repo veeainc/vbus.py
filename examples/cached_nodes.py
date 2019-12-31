@@ -1,7 +1,7 @@
 import asyncio
 from vbus import Client
 import logging
-from vbus import builder
+from vbus import definitions
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -21,11 +21,11 @@ async def main():
     node = await client.add_node("00:45:25:65:25:ff", {
         'uuid': "foo",
         'name': "Heiman",
-        'scan': builder.Method(on_scan),
+        'scan': definitions.MethodDef(on_scan),
         'endpoints': {
             '1': {
                 'attributes': {
-                    '1': builder.Node({
+                    '1': definitions.NodeDef({
                         'name': 'temperature',
                     }, on_write=on_attribute_write)
                 }

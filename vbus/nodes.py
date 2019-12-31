@@ -1,10 +1,15 @@
+"""
+    This module contains connected nodes.
+    A connected node is composed of a node definition and send commands over the Vbus when the
+    user performs action on it. For example: add a child node, delete a node, call a method, etc...
+"""
 import sys
 import asyncio
 import logging
 from typing import Dict, Callable, Awaitable, List
 
-from vbus.builder import NodeBuilder
-from . import builder
+from vbus.definitions import Definition
+from . import definitions
 from .helpers import from_vbus, join_path, get_path_in_dict
 from .nats import ExtendedNatsClient
 
@@ -13,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 # The callable user to retrieve node definition
 GetNodeDefCallable = Callable[[], Awaitable[Dict]]
-NodeType = Dict or builder.Node or builder.Method
+NodeType = Dict or definitions.NodeDef or definitions.MethodDef
 
 
 class AttributeProxy:
@@ -86,11 +91,13 @@ class MethodProxy:
 
 
 class Node:
-    """ Base node class. """
-    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_builder: NodeBuilder, parent: 'Node' = None):
+    """ A VBus connected node.
+        This node contains a node definition and send update over VBus.
+    """
+    def __init__(self, nats: ExtendedNatsClient, uuid: str, node_def: Definition, parent: 'Node' = None):
         self._nats = nats
         self._uuid = uuid
-        self._builder = node_builder
+        self._definition = node_def
         self._parent = parent
 
     @property
@@ -99,43 +106,46 @@ class Node:
         return self._uuid
 
     @property
-    def base_path(self) -> str:
-        """ Returns node base path. """
+    def path(self) -> str:
+        """ Returns node path. """
         if self._parent:
-            return join_path(self._parent.base_path, self._uuid)
+            return join_path(self._parent.path, self._uuid)
         else:
             return self._uuid
 
-    async def add_node(self, uuid: str, node_def: Dict, on_write: Callable = None) -> 'Node':
-        """ Add a child cached node. """
-        node_builder = builder.Node(node_def, on_write=on_write)
-        self._builder.add_node(uuid, node_builder)
-        node = Node(self._nats, uuid, node_builder, self)
+    async def add_node(self, uuid: str, node_raw_def: Dict, on_write: Callable = None) -> 'Node':
+        """ Add a child node and notify Vbus. """
+        node_def = definitions.NodeDef(node_raw_def, on_write=on_write)
+        self._definition.add_child(uuid, node_def)
+        node = Node(self._nats, uuid, node_def, self)
 
         # send the node definition on Vbus
-        await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
-        return Node(self._nats, uuid, node_builder, self)
+        await self._nats.async_publish(join_path(node.path, "add"), node_def.to_json())
+        return Node(self._nats, uuid, node_def, self)
 
-    async def remove_node(self, uuid: str):
-        node_builder = self._builder.remove_node(uuid)
+    async def remove_node(self, uuid: str) -> None:
+        """ Delete a node and notify VBus. """
+        node_builder = self._definition.remove_child(uuid)
 
         if not node_builder:
             LOGGER.warning('trying to remove unknown node: %s', uuid)
             return
 
-        await self._nats.async_publish(join_path(self.base_path, uuid, "del"), node_builder.to_json())
+        await self._nats.async_publish(join_path(self.path, uuid, "del"), node_builder.to_json())
 
     async def get_attribute(self, *parts: str) -> AttributeProxy or None:
-        node_builder = self._builder.search(list(parts))
-        if node_builder:
-            return NodeProxy(self._nats, self.base_path + "." + ".".join(parts), node_builder)
+        """ Retrieve an attribute proxy. """
+        node_def = self._definition.search(list(parts))
+        if node_def:
+            return NodeProxy(self._nats, self.path + "." + ".".join(parts), node_def)
         else:
             return None
 
     async def get_method(self, *parts: str) -> MethodProxy or None:
-        node_builder = self._builder.search(list(parts))
-        if node_builder:
-            return MethodProxy(self._nats, self.base_path + "." + ".".join(parts), node_builder)
+        """ Retrieve a method proxy. """
+        node_def = self._definition.search(list(parts))
+        if node_def:
+            return MethodProxy(self._nats, self.path + "." + ".".join(parts), node_def)
         else:
             return None
 
@@ -148,19 +158,19 @@ class Node:
             def scan(self, time: int) -> None:
                 pass
         """
-        node_builder = builder.Method(method)
-        node_builder.validate_callback()  # raise exception
-        self._builder.add_node(uuid, node_builder)
-        node = Node(self._nats, uuid, node_builder, self)
+        node_def = definitions.MethodDef(method)
+        node_def.validate_callback()  # raise exception
+        self._definition.add_child(uuid, node_def)
+        node = Node(self._nats, uuid, node_def, self)
 
-        await self._nats.async_publish(join_path(node.base_path, "add"), node_builder.to_json())
+        await self._nats.async_publish(join_path(node.path, "add"), node_def.to_json())
         return node
 
     async def subscribe_set(self, path: str, callback: Callable[[], Awaitable[any]]):
         pass
 
     async def set(self, path: str, value: any):
-        await self._nats.async_publish(join_path(self.base_path, path, "set"), value)
+        await self._nats.async_publish(join_path(self.path, path, "set"), value)
 
 
 NodeHandler = Callable[[str or None], Awaitable[Dict]]
@@ -171,7 +181,7 @@ class NodeManager(Node):
         It manage node lifecycle.
         """
     def __init__(self, nats: ExtendedNatsClient):
-        super().__init__(nats, "", builder.Node({}))
+        super().__init__(nats, "", definitions.NodeDef({}))
         self._nats = nats
         self._node_handler: NodeHandler = None
 
@@ -198,16 +208,16 @@ class NodeManager(Node):
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
         return {
-            self._nats.hostname: self._builder.definition
+            self._nats.hostname: self._definition.definition
         }
 
     async def handle_set(self, parts: List[str], data) -> Node:
-        node_builder = self._builder.search(parts)
+        node_builder = self._definition.search(parts)
         if node_builder:
             return await node_builder.handle_set(data, parts)
 
     async def handle_get(self, parts: List[str]) -> Node:
-        node_builder = self._builder.search(parts)
+        node_builder = self._definition.search(parts)
         if node_builder:
             return node_builder
 
