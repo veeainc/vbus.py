@@ -6,11 +6,12 @@
 import sys
 import asyncio
 import logging
-from typing import Dict, Callable, Awaitable, List
+from typing import Dict, Callable, Awaitable, List, Optional
 
 from vbus.definitions import Definition
 from . import definitions
-from .helpers import from_vbus, join_path, get_path_in_dict
+from . import proxies
+from .helpers import from_vbus, join_path
 from .nats import ExtendedNatsClient
 
 
@@ -19,89 +20,6 @@ LOGGER = logging.getLogger(__name__)
 # The callable user to retrieve node definition
 GetNodeDefCallable = Callable[[], Awaitable[Dict]]
 NodeType = Dict or definitions.NodeDef or definitions.MethodDef
-
-
-class AttributeProxy:
-    """ Represents remote attributes actions. """
-    def __init__(self, nats: ExtendedNatsClient, path: str):
-        self._nats = nats
-        self._path = path
-        self._sids = []
-
-    async def set(self, value: any):
-        return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
-
-    async def subscribe_set(self, on_set: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=on_set, with_id=False, with_host=False)
-        self._sids.append(sis)
-
-    async def unsubscribe(self):
-        for sid in self._sids:
-            await self._nats.nats.unsubscribe(sid)
-
-
-class NodeProxy:
-    """ Represents remote node actions. """
-    def __init__(self, nats: ExtendedNatsClient, path: str, node_json: Dict):
-        self._nats = nats
-        self._path = path
-        self._node_json = node_json
-        self._sids = []
-
-    async def get_method(self, *parts: str) -> 'MethodProxy' or None:
-        node_json = get_path_in_dict(self._node_json, *parts)
-        if node_json:
-            return MethodProxy(self._nats, self._path + "." + ".".join(parts), node_json)
-        else:
-            return None
-
-    @property
-    def path(self):
-        return self._path
-
-    async def set(self, value: any):
-        return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
-
-    def items(self):
-        for k, v in self._node_json.items():
-            yield k, NodeProxy(self._nats, join_path(self._path, k), v)
-
-    async def get_attribute(self, *parts: str) -> AttributeProxy:
-        # TODO: check existence or retrieve
-        return AttributeProxy(self._nats, join_path(self._path, *parts))
-
-    async def get_node(self, *parts: str) -> 'NodeProxy' or None:
-        n = get_path_in_dict(self._node_json, *parts)
-        if n:
-            return NodeProxy(self._nats, join_path(self._path, *parts), n)
-        return None
-
-    def __getitem__(self, item):
-        return self._node_json[item]
-
-    async def subscribe_add(self, on_add: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "add"), cb=on_add, with_id=False, with_host=False)
-        self._sids.append(sis)
-
-    async def subscribe_del(self, on_del: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "del"), cb=on_del, with_id=False, with_host=False)
-        self._sids.append(sis)
-
-    async def unsubscribe(self):
-        for sid in self._sids:
-            await self._nats.nats.unsubscribe(sid)
-
-
-class MethodProxy:
-    """ Represents remote method actions. """
-    def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
-        self._nats = nats
-        self._path = path
-        self._node_def = node_def
-
-    async def call(self, value: any, timeout_sec: float = 0.5):
-        return await self._nats.async_request(self._path + ".set", value, with_host=False, with_id=False,
-                                              timeout=timeout_sec)
 
 
 class Node:
@@ -149,35 +67,35 @@ class Node:
         data = {uuid: node_def.definition}
         await self._nats.async_publish(join_path(self.path, "del"), data)
 
-    async def get_attribute(self, *parts: str) -> AttributeProxy or None:
+    async def get_attribute(self, *parts: str) -> Optional[proxies.AttributeProxy]:
         """ Retrieve an attribute proxy. """
         node_def = self._definition.search_path(list(parts))
         if node_def:
-            return NodeProxy(self._nats, self.path + "." + ".".join(parts), node_def)
+            return proxies.AttributeProxy(self._nats, self.path + "." + ".".join(parts))
         else:
             return None
 
-    async def get_method(self, *parts: str) -> MethodProxy or None:
+    async def get_method(self, *parts: str) -> Optional[proxies.MethodProxy]:
         """ Retrieve a method proxy. """
         # check if already loaded
         method_def = self._definition.search_path(list(parts))
         if method_def:
-            return MethodProxy(self._nats, join_path(self.path, *parts), method_def)
+            return proxies.MethodProxy(self._nats, join_path(self.path, *parts), method_def)
         else:
             # try to load from vbus
             method_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
-            return MethodProxy(self._nats,join_path(self.path, *parts), method_def)
+            return proxies.MethodProxy(self._nats,join_path(self.path, *parts), method_def)
 
-    async def get_node(self, *parts: str) -> NodeProxy or None:
+    async def get_node(self, *parts: str) -> Optional[proxies.NodeProxy]:
         """ Retrieve a node proxy. """
         # check if already loaded
         node_def = self._definition.search_path(list(parts))
         if node_def:
-            return NodeProxy(self._nats, join_path(self.path, *parts), node_def)
+            return proxies.NodeProxy(self._nats, join_path(self.path, *parts), node_def)
         else:
             # try to load from vbus
             node_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
-            return NodeProxy(self._nats,join_path(self.path, *parts), node_def)
+            return proxies.NodeProxy(self._nats,join_path(self.path, *parts), node_def)
 
     async def add_method(self, uuid: str, method: Callable) -> 'Node':
         """ Register a new callback as a method.
@@ -216,7 +134,7 @@ class NodeManager(Node):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
 
-    async def discover(self, domain: str, app_id: str, timeout: int = 1) -> NodeProxy:
+    async def discover(self, domain: str, app_id: str, timeout: int = 1) -> proxies.NodeProxy:
         json_node = {}
 
         async def async_on_discover(msg):
@@ -230,7 +148,7 @@ class NodeManager(Node):
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
         # node_builder = builder.Node(json_node)
-        return NodeProxy(self._nats, f"{domain}.{app_id}", json_node)
+        return proxies.NodeProxy(self._nats, f"{domain}.{app_id}", json_node)
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
