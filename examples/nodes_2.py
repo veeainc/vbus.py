@@ -1,7 +1,9 @@
+"""
+    This example demonstrate how to create a node in a fluent way and how to discover it.
+"""
 import asyncio
 from vbus import Client
 import logging
-from vbus import definitions
 
 
 logging.basicConfig(level=logging.DEBUG)

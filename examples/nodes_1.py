@@ -1,3 +1,6 @@
+"""
+    This example demonstrate how to create a node and how to discover it.
+"""
 import asyncio
 from vbus import Client
 import logging
