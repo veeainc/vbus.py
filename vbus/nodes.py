@@ -46,6 +46,7 @@ class NodeProxy:
         self._nats = nats
         self._path = path
         self._node_json = node_json
+        self._sids = []
 
     async def get_method(self, *parts: str) -> 'MethodProxy' or None:
         node_json = get_path_in_dict(self._node_json, *parts)
@@ -78,6 +79,18 @@ class NodeProxy:
     def __getitem__(self, item):
         return self._node_json[item]
 
+    async def subscribe_add(self, on_add: Callable):
+        sis = await self._nats.async_subscribe(join_path(self._path, "add"), cb=on_add, with_id=False, with_host=False)
+        self._sids.append(sis)
+
+    async def subscribe_del(self, on_del: Callable):
+        sis = await self._nats.async_subscribe(join_path(self._path, "del"), cb=on_del, with_id=False, with_host=False)
+        self._sids.append(sis)
+
+    async def unsubscribe(self):
+        for sid in self._sids:
+            await self._nats.nats.unsubscribe(sid)
+
 
 class MethodProxy:
     """ Represents remote method actions. """
@@ -86,8 +99,9 @@ class MethodProxy:
         self._path = path
         self._node_def = node_def
 
-    async def call(self, value: any):
-        return await self._nats.async_request(self._path + ".set", value, with_host=False, with_id=False)
+    async def call(self, value: any, timeout_sec: float = 0.5):
+        return await self._nats.async_request(self._path + ".set", value, with_host=False, with_id=False,
+                                              timeout=timeout_sec)
 
 
 class Node:
@@ -120,18 +134,20 @@ class Node:
         node = Node(self._nats, uuid, node_def, self)
 
         # send the node definition on Vbus
-        await self._nats.async_publish(join_path(node.path, "add"), node_def.to_json())
+        data = {uuid: node_def.definition}
+        await self._nats.async_publish(join_path(self.path, "add"), data)
         return Node(self._nats, uuid, node_def, self)
 
     async def remove_node(self, uuid: str) -> None:
         """ Delete a node and notify VBus. """
-        node_builder = self._definition.remove_child(uuid)
+        node_def = self._definition.remove_child(uuid)
 
-        if not node_builder:
+        if not node_def:
             LOGGER.warning('trying to remove unknown node: %s', uuid)
             return
 
-        await self._nats.async_publish(join_path(self.path, uuid, "del"), node_builder.to_json())
+        data = {uuid: node_def.definition}
+        await self._nats.async_publish(join_path(self.path, "del"), data)
 
     async def get_attribute(self, *parts: str) -> AttributeProxy or None:
         """ Retrieve an attribute proxy. """
@@ -143,13 +159,27 @@ class Node:
 
     async def get_method(self, *parts: str) -> MethodProxy or None:
         """ Retrieve a method proxy. """
+        # check if already loaded
+        method_def = self._definition.search_path(list(parts))
+        if method_def:
+            return MethodProxy(self._nats, join_path(self.path, *parts), method_def)
+        else:
+            # try to load from vbus
+            method_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
+            return MethodProxy(self._nats,join_path(self.path, *parts), method_def)
+
+    async def get_node(self, *parts: str) -> NodeProxy or None:
+        """ Retrieve a node proxy. """
+        # check if already loaded
         node_def = self._definition.search_path(list(parts))
         if node_def:
-            return MethodProxy(self._nats, self.path + "." + ".".join(parts), node_def)
+            return NodeProxy(self._nats, join_path(self.path, *parts), node_def)
         else:
-            return None
+            # try to load from vbus
+            node_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
+            return NodeProxy(self._nats,join_path(self.path, *parts), node_def)
 
-    async def add_method(self, uuid: str, method: Callable) -> 'MethodNode':
+    async def add_method(self, uuid: str, method: Callable) -> 'Node':
         """ Register a new callback as a method.
             The callback must be annotated with Python type.
             See: https://docs.python.org/3/library/typing.html
@@ -165,9 +195,6 @@ class Node:
 
         await self._nats.async_publish(join_path(node.path, "add"), node_def.to_json())
         return node
-
-    async def subscribe_set(self, path: str, callback: Callable[[], Awaitable[any]]):
-        pass
 
     async def set(self, path: str, value: any):
         await self._nats.async_publish(join_path(self.path, path, "set"), value)

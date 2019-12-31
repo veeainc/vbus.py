@@ -208,7 +208,10 @@ class ExtendedNatsClient:
         async def on_data(msg):
             m = re.match(regex, msg.subject)
             if m:
-                ret = await cb(from_vbus(msg.data), *m.groups())
+                try:
+                    ret = await cb(from_vbus(msg.data), *m.groups())
+                except Exception as e:
+                    LOGGER.exception(e)
                 if msg.reply:
                     await self._nats.publish(msg.reply, to_vbus(ret))
 
