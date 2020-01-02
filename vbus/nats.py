@@ -153,7 +153,7 @@ class ExtendedNatsClient:
                     "bridge": "None",
                 },
                 "auth": {
-                    "user": f"{self._hostname}.{self._id}",
+                    "user": f"{self._id}.{self._hostname}",
                     "password": public_key.decode('utf-8'),
                     "permissions": {
                         "subscribe": [
