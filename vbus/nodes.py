@@ -52,7 +52,7 @@ class Node:
         node = Node(self._nats, uuid, node_def, self)
 
         # send the node definition on Vbus
-        data = {uuid: node_def.definition}
+        data = {uuid: node_def.to_json()}
         await self._nats.async_publish(join_path(self.path, "add"), data)
         return Node(self._nats, uuid, node_def, self)
 
@@ -106,12 +106,13 @@ class Node:
             def scan(self, time: int) -> None:
                 pass
         """
-        node_def = definitions.MethodDef(method)
-        node_def.validate_callback()  # raise exception
-        self._definition.add_child(uuid, node_def)
-        node = Node(self._nats, uuid, node_def, self)
+        method_def = definitions.MethodDef(method)
+        method_def.validate_callback()  # raise exception
+        self._definition.add_child(uuid, method_def)
+        node = Node(self._nats, uuid, method_def, self)
 
-        await self._nats.async_publish(join_path(node.path, "add"), node_def.to_json())
+        data = {uuid: method_def.to_json()}
+        await self._nats.async_publish(join_path(self.path, "add"), data)
         return node
 
     async def set(self, path: str, value: any):
