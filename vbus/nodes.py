@@ -187,3 +187,12 @@ class NodeManager(Node):
         if self._node_handler is not None:
             LOGGER.warning("overriding node handler")
         self._node_handler = node_handler
+
+    async def subscribe_add(self, path: str, cb: Callable):
+        return await self._nats.async_subscribe(join_path(path, "add"), cb, with_id=False, with_host=False)
+
+    async def subscribe_del(self, path: str, cb: Callable):
+        return await self._nats.async_subscribe(join_path(path, "del"), cb, with_id=False, with_host=False)
+
+    async def subscribe_set(self, path: str, cb: Callable):
+        return await self._nats.async_subscribe(join_path(path, "set"), cb, with_id=False, with_host=False)

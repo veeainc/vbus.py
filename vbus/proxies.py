@@ -39,6 +39,10 @@ class NodeProxy(Proxy):
         super().__init__(nats, path)
         self._node_json = node_json
 
+    @property
+    def tree(self) -> Dict:
+        return self._node_json
+
     async def get_method(self, *parts: str) -> 'MethodProxy' or None:
         node_json = get_path_in_dict(self._node_json, *parts)
         if node_json:
