@@ -27,7 +27,7 @@ def get_hostname() -> str:
     return hostname
 
 
-def from_vbus(data: bytes) -> Dict:
+def from_vbus(data: bytes) -> Dict or None:
     """ Convert json as bytes to Python object. """
     if data:
         return json.loads(data.decode('utf-8'))
@@ -37,12 +37,10 @@ def from_vbus(data: bytes) -> Dict:
 
 def to_vbus(data: any) -> bytes:
     """ Convert Python object to json as bytes. """
-    from vbus.definitions import VBusBuilderEncoder
-
     if data is None:
         return b''
     else:
-        return json.dumps(data, cls=VBusBuilderEncoder).encode('utf-8')
+        return json.dumps(data).encode('utf-8')
 
 
 def get_path_in_dict(d: Dict, *parts: str):

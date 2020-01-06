@@ -1,7 +1,7 @@
 """
     This module contains node definition classes.
     Theses classes are used to hold user data like the json structure, callbacks, etc...
-    They are not connected to the bus. They just act as a data holder.
+    They are not connected to Vbus. They just act as a data holder.
     Each of theses classes can be serialized to Json to be sent on Vbus.
 """
 import json
@@ -11,44 +11,16 @@ from typing import Callable, Dict, List
 
 
 class Definition(ABC):
-    """ Base class for creating an element definition.
-    """
+    """ Base class for creating an element definition. """
     def __init__(self):
-        self._structure = {}
+        pass
 
-    @property
-    def definition(self) -> Dict:
-        return self._structure
-
+    @abstractmethod
     def search_path(self, parts: List[str]) -> 'Definition' or None or any:
         """ Search for a path in this definition.
             It can returns a Definition class or a dictionary or none if not found.
         """
-        if not parts:
-            return self
-
-        root = self.definition
-        for i, part in enumerate(parts):
-            if part in root:
-                root = root[part]
-                if isinstance(root, Definition):
-                    return root.search_path(parts[i + 1:])
-            else:
-                return None  # not found
-        return root
-
-    def add_child(self, uuid: str, node: 'Definition'):
-        """ Add a child element to this definition. """
-        self._structure[uuid] = node
-
-    def remove_child(self, uuid: str) -> 'Definition' or None:
-        """ Remove a child element from this definition. """
-        if uuid not in self._structure:
-            return None
-
-        builder = self._structure[uuid]
-        del self._structure[uuid]
-        return builder
+        pass
 
     @abstractmethod
     async def handle_set(self, data: any, parts: List[str]):
@@ -57,7 +29,7 @@ class Definition(ABC):
 
     @abstractmethod
     def to_json(self) -> any:
-        """ Convert this definition to a Json Python Object."""
+        """ Get the Json representation (as a Python Object)."""
         pass
 
 
@@ -68,6 +40,7 @@ class MethodDef(Definition):
     def __init__(self, method: Callable):
         super().__init__()
         self._method = method
+        self._name = method.__name__
 
     def to_json(self) -> any:
         inspection = inspect.getfullargspec(self._method)
@@ -112,28 +85,70 @@ class MethodDef(Definition):
     async def handle_set(self, data: any, parts: List[str]):
         return await self._method(data)
 
+    def search_path(self, parts: List[str]) -> Definition or None:
+        if not parts:
+            return self
+        return None
+
+
+class AttributeDef(Definition):
+    def __init__(self, uuid: str, value: any):
+        super().__init__()
+        self._key = uuid
+        self._value = value
+
+    async def handle_set(self, data: any, parts: List[str]):
+        pass
+
+    def to_json(self) -> any:
+        return self._value
+
+    def search_path(self, parts: List[str]) -> Definition or None:
+        if not parts:
+            return self
+        return None
+
 
 class NodeDef(Definition):
     """ A node definition.
         It holds a user structure (Python object) and optional callbacks.
     """
-    def __init__(self, node_raw_def: Dict, on_write: Callable = lambda: None):
+    def __init__(self, node_def: Dict, on_write: Callable = lambda: None):
         super().__init__()
-        self._structure = node_raw_def
+        self._initialize_structure(node_def)
+        self._structure = node_def
         self._on_write = on_write
 
+    def _initialize_structure(self, node_def: Dict):
+        """ Take a node definition (raw dict) and replace them with attributes and nodes. """
+        for k, v in node_def.items():
+            if isinstance(v, dict):
+                node_def[k] = NodeDef(v)
+            elif not isinstance(v, Definition):
+                node_def[k] = AttributeDef(k, v)
+
+    def add_child(self, uuid: str, node: 'Definition'):
+        """ Add a child element to this definition. """
+        self._structure[uuid] = node
+
+    def remove_child(self, uuid: str) -> 'Definition' or None:
+        """ Remove a child element from this definition. """
+        if uuid not in self._structure:
+            return None
+
+        builder = self._structure[uuid]
+        del self._structure[uuid]
+        return builder
+
     def to_json(self) -> any:
-        return self._structure
+        return {k: v.to_json() for k, v in self._structure.items()}
 
     async def handle_set(self, data: any, parts: List[str]):
         return await self._on_write(data, parts)
 
-
-class VBusBuilderEncoder(json.JSONEncoder):
-    """ A custom Python Json encoder to tell how to convect Definition classes to json. """
-    def default(self, o):
-        if isinstance(o, Definition):
-            return o.to_json()
-        else:
-            raise ValueError("unknown type: " + type(o))
-
+    def search_path(self, parts: List[str]) -> Definition or None:
+        if not parts:
+            return self
+        elif parts[0] in self._structure:
+            return self._structure[parts[0]].search_path(parts[1:])
+        return None

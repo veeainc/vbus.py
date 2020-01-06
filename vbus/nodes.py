@@ -47,6 +47,7 @@ class Node:
 
     async def add_node(self, uuid: str, node_raw_def: Dict, on_write: Callable = None) -> 'Node':
         """ Add a child node and notify Vbus. """
+        assert isinstance(self._definition, definitions.NodeDef)
         node_def = definitions.NodeDef(node_raw_def, on_write=on_write)
         self._definition.add_child(uuid, node_def)
         node = Node(self._nats, uuid, node_def, self)
@@ -58,13 +59,14 @@ class Node:
 
     async def remove_node(self, uuid: str) -> None:
         """ Delete a node and notify VBus. """
+        assert isinstance(self._definition, definitions.NodeDef)
         node_def = self._definition.remove_child(uuid)
 
         if not node_def:
             LOGGER.warning('trying to remove unknown node: %s', uuid)
             return
 
-        data = {uuid: node_def.definition}
+        data = {uuid: node_def.to_json()}
         await self._nats.async_publish(join_path(self.path, "del"), data)
 
     async def get_attribute(self, *parts: str) -> Optional[proxies.AttributeProxy]:
@@ -106,6 +108,7 @@ class Node:
             def scan(self, time: int) -> None:
                 pass
         """
+        assert isinstance(self._definition, definitions.NodeDef)
         method_def = definitions.MethodDef(method)
         method_def.validate_callback()  # raise exception
         self._definition.add_child(uuid, method_def)
@@ -129,7 +132,6 @@ class NodeManager(Node):
     def __init__(self, nats: ExtendedNatsClient):
         super().__init__(nats, "", definitions.NodeDef({}))
         self._nats = nats
-        self._node_handler: NodeHandler = None
 
     async def initialize(self):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
@@ -154,7 +156,7 @@ class NodeManager(Node):
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
         return {
-            self._nats.hostname: self._definition.definition
+            self._nats.hostname: self._definition.to_json()
         }
 
     async def handle_set(self, parts: List[str], data) -> Node:
@@ -182,11 +184,6 @@ class NodeManager(Node):
         elif method == "set":
             return await self.handle_set(parts, data)
         return None
-
-    def set_node_handler(self, node_handler: NodeHandler):
-        if self._node_handler is not None:
-            LOGGER.warning("overriding node handler")
-        self._node_handler = node_handler
 
     async def subscribe_add(self, path: str, cb: Callable):
         return await self._nats.async_subscribe(join_path(path, "add"), cb, with_id=False, with_host=False)
