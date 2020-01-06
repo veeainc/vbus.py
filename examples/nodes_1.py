@@ -39,6 +39,7 @@ async def main():
     await asyncio.sleep(1)
 
     nodes = await client.discover("system", "test", timeout=1)
+    print(nodes.tree)
     attr = await nodes.get_attribute("boolangery-ThinkPad-P1-Gen-2", "00:45:25:65:25:ff", "endpoints", "1", "attributes", "1")
     if attr:
         await attr.set(42)

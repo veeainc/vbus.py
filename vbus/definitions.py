@@ -4,8 +4,8 @@
     They are not connected to Vbus. They just act as a data holder.
     Each of theses classes can be serialized to Json to be sent on Vbus.
 """
-import json
 import inspect
+from genson import SchemaBuilder
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
 
@@ -32,6 +32,11 @@ class Definition(ABC):
         """ Get the Json representation (as a Python Object)."""
         pass
 
+    @abstractmethod
+    def to_schema(self) -> any:
+        """ Get the Json Schema representation (as a Python Object)."""
+        pass
+
 
 class MethodDef(Definition):
     """ A Method definition.
@@ -41,23 +46,6 @@ class MethodDef(Definition):
         super().__init__()
         self._method = method
         self._name = method.__name__
-
-    def to_json(self) -> any:
-        inspection = inspect.getfullargspec(self._method)
-        ann = inspection.annotations
-
-        params_schema = {"type": "array", "items": []}
-        for arg in inspection.args:
-            params_schema["items"].append({
-                "type": MethodDef.py_types_to_json_schema[ann[arg]],
-                "description": arg
-            })
-        return_schema = {"type": MethodDef.py_types_to_json_schema[ann['return']]}
-
-        return {
-            "params": params_schema,
-            "returns": return_schema,
-        }
 
     # Convert a Python type to a Json Schema one.
     py_types_to_json_schema = {
@@ -90,6 +78,26 @@ class MethodDef(Definition):
             return self
         return None
 
+    def to_json(self) -> any:
+        inspection = inspect.getfullargspec(self._method)
+        ann = inspection.annotations
+
+        params_schema = {"type": "array", "items": []}
+        for arg in inspection.args:
+            params_schema["items"].append({
+                "type": MethodDef.py_types_to_json_schema[ann[arg]],
+                "description": arg
+            })
+        return_schema = {"type": MethodDef.py_types_to_json_schema[ann['return']]}
+
+        return {
+            "params": params_schema,
+            "returns": return_schema,
+        }
+
+    def to_schema(self) -> any:
+        return None
+
 
 class AttributeDef(Definition):
     def __init__(self, uuid: str, value: any):
@@ -100,13 +108,19 @@ class AttributeDef(Definition):
     async def handle_set(self, data: any, parts: List[str]):
         pass
 
-    def to_json(self) -> any:
-        return self._value
-
     def search_path(self, parts: List[str]) -> Definition or None:
         if not parts:
             return self
         return None
+
+    def to_json(self) -> any:
+        return self._value
+
+    def to_schema(self) -> any:
+        # we use genson library to determine schema type:
+        builder = SchemaBuilder()
+        builder.add_object(self._value)
+        return builder.to_schema()['type']
 
 
 class NodeDef(Definition):
@@ -140,9 +154,6 @@ class NodeDef(Definition):
         del self._structure[uuid]
         return builder
 
-    def to_json(self) -> any:
-        return {k: v.to_json() for k, v in self._structure.items()}
-
     async def handle_set(self, data: any, parts: List[str]):
         return await self._on_write(data, parts)
 
@@ -152,3 +163,25 @@ class NodeDef(Definition):
         elif parts[0] in self._structure:
             return self._structure[parts[0]].search_path(parts[1:])
         return None
+
+    def to_json(self) -> any:
+        return {
+            **{k: v.to_json() for k, v in self._structure.items()},
+            'schema': self.to_schema(),
+        }
+
+    def to_schema(self) -> any:
+        # we use genson library to determine schema type:
+        builder = SchemaBuilder()
+
+        for k, v in self._structure.items():
+            if isinstance(v, AttributeDef):
+                builder.add_object({k: v.to_schema()})
+            elif isinstance(v, NodeDef):
+                builder.add_object({k: {}})
+
+        # clean unused properties
+        schema = builder.to_schema()
+        schema.pop("$schema", None)
+        schema.pop("required", None)
+        return schema
