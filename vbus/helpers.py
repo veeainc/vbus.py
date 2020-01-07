@@ -40,7 +40,7 @@ def to_vbus(data: any) -> bytes:
     if data is None:
         return b''
     else:
-        return json.dumps(data).encode('utf-8')
+        return json.dumps(data, separators=(',', ':')).encode('utf-8')
 
 
 def get_path_in_dict(d: Dict, *parts: str):
