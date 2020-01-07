@@ -16,7 +16,7 @@ class Definition(ABC):
         pass
 
     @abstractmethod
-    def search_path(self, parts: List[str]) -> 'Definition' or None or any:
+    def search_path(self, parts: List[str]) -> 'Definition' or None:
         """ Search for a path in this definition.
             It can returns a Definition class or a dictionary or none if not found.
         """

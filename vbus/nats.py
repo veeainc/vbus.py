@@ -21,7 +21,6 @@ class ExtendedNatsClient:
         self._loop = loop or asyncio.get_event_loop()
         self._hostname: str = get_hostname()
         self._id = f"{app_domain}.{app_id}"
-        self._root_path = f"{self._id}.{self._hostname}"
         self._env = self._read_env_vars()
         self._root_folder = self._env[VBUS_PATH]
         if not self._root_folder:
