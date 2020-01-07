@@ -5,7 +5,7 @@
     Each of theses classes can be serialized to Json to be sent on Vbus.
 """
 import inspect
-from genson import SchemaBuilder
+import genson
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
 
@@ -121,11 +121,14 @@ class AttributeDef(Definition):
 
     def to_schema(self) -> any:
         # we use genson library to determine schema type:
-        builder = SchemaBuilder()
-        builder.add_object(self._value)
-        schema = builder.to_schema()
-        schema.pop("$schema", None)
-        return schema
+        try:
+            builder = genson.SchemaBuilder()
+            builder.add_object(self._value)
+            schema = builder.to_schema()
+            schema.pop("$schema", None)
+            return schema
+        except genson.schema.node.SchemaGenerationError as e:
+            raise TypeError(f"Invalid attribute type for {self._key}, type is {type(self._value)} ({str(e)})")
 
 
 class NodeDef(Definition):
@@ -174,7 +177,7 @@ class NodeDef(Definition):
 
     def to_schema(self) -> any:
         # we use genson library to determine schema type:
-        builder = SchemaBuilder()
+        builder = genson.SchemaBuilder()
 
         for k, v in self._structure.items():
             if isinstance(v, AttributeDef):
