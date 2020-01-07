@@ -43,6 +43,15 @@ def to_vbus(data: any) -> bytes:
         return json.dumps(data, separators=(',', ':')).encode('utf-8')
 
 
+def prune_dict(tree: dict, max: int, current: int = 0):
+    for key, value in tree.items():
+        if isinstance(value, dict):
+            if current == max:
+                tree[key] = "..."
+            else:
+                prune_dict(value, max, current + 1)
+
+
 def get_path_in_dict(d: Dict, *parts: str):
     """ Find a sub-element in a dict. """
     root = d

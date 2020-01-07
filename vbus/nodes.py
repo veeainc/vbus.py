@@ -11,7 +11,7 @@ from typing import Dict, Callable, Awaitable, List, Optional
 from vbus.definitions import Definition
 from . import definitions
 from . import proxies
-from .helpers import from_vbus, join_path
+from .helpers import from_vbus, join_path, to_vbus, prune_dict
 from .nats import ExtendedNatsClient
 
 
@@ -137,7 +137,7 @@ class NodeManager(Node):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
 
-    async def discover(self, domain: str, app_id: str, timeout: int = 1) -> proxies.NodeProxy:
+    async def discover(self, domain: str, app_id: str, timeout: int = 1, level: int = None) -> proxies.NodeProxy:
         json_node = {}
 
         async def async_on_discover(msg):
@@ -145,7 +145,12 @@ class NodeManager(Node):
             json_data = from_vbus(msg.data)
             json_node = {**json_node, **json_data}
 
-        sid = await self._nats.nats.request(f"{domain}.{app_id}", b"",
+        filters = {}
+        if level:
+            filters["max_level"] = level
+
+        sid = await self._nats.nats.request(f"{domain}.{app_id}",
+                                            to_vbus(filters),
                                             expected=sys.maxsize,
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
@@ -155,9 +160,16 @@ class NodeManager(Node):
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
-        return {
-            self._nats.hostname: self._definition.to_json()
-        }
+        level = None
+        if "max_level" in data:
+            level = data["max_level"]
+            data = {self._nats.hostname: self._definition.to_json()}
+            prune_dict(data, level)
+            return data
+        else:
+            return {
+                self._nats.hostname: self._definition.to_json()
+            }
 
     async def handle_set(self, parts: List[str], data) -> Node:
         node_builder = self._definition.search_path(parts)

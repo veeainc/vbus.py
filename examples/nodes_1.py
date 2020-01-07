@@ -5,7 +5,7 @@ import asyncio
 from vbus import Client
 import logging
 from vbus import definitions
-
+import json
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -39,12 +39,12 @@ async def main():
 
     await asyncio.sleep(1)
 
-    nodes = await client.discover("system", "test", timeout=1)
-    print(nodes.tree)
+    nodes = await client.discover("system", "test", timeout=1, level=2)
+    print(json.dumps(nodes.tree, indent=4, sort_keys=True))
+
     attr = await nodes.get_attribute("boolangery-ThinkPad-P1-Gen-2", "00:45:25:65:25:ff", "endpoints", "1", "attributes", "1")
     if attr:
         await attr.set(42)
-
 
 
     #method = await nodes.get_method("boolangery-ThinkPad-P1-Gen-2", "00:45:25:65:25:AA", "scan")
