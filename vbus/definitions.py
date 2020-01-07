@@ -114,13 +114,18 @@ class AttributeDef(Definition):
         return None
 
     def to_json(self) -> any:
-        return self._value
+        return {
+            'schema': self.to_schema(),
+            'value': self._value,
+        }
 
     def to_schema(self) -> any:
         # we use genson library to determine schema type:
         builder = SchemaBuilder()
         builder.add_object(self._value)
-        return builder.to_schema()['type']
+        schema = builder.to_schema()
+        schema.pop("$schema", None)
+        return schema
 
 
 class NodeDef(Definition):
@@ -165,10 +170,7 @@ class NodeDef(Definition):
         return None
 
     def to_json(self) -> any:
-        return {
-            **{k: v.to_json() for k, v in self._structure.items()},
-            'schema': self.to_schema(),
-        }
+        return {k: v.to_json() for k, v in self._structure.items()}
 
     def to_schema(self) -> any:
         # we use genson library to determine schema type:

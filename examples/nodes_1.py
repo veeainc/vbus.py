@@ -24,6 +24,7 @@ async def main():
     node = await client.add_node("00:45:25:65:25:ff", {
         'uuid': "foo",
         'name': "Heiman",
+        'tuning': [1, 2, 3],
         'scan': definitions.MethodDef(on_scan),
         'endpoints': {
             '1': {
