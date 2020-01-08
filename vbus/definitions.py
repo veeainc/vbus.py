@@ -150,7 +150,7 @@ class NodeDef(Definition):
     """ A node definition.
         It holds a user structure (Python object) and optional callbacks.
     """
-    def __init__(self, node_def: Dict, on_write: Callable = lambda: None):
+    def __init__(self, node_def: Dict, on_write: Callable = None):
         super().__init__()
         self._initialize_structure(node_def)
         self._structure = node_def
@@ -178,7 +178,10 @@ class NodeDef(Definition):
         return builder
 
     async def handle_set(self, data: any, parts: List[str]):
-        return await self._on_write(data, parts)
+        if self._on_write:
+            return await self._on_write(data, parts)
+        else:
+            return None
 
     def search_path(self, parts: List[str]) -> Definition or None:
         if not parts:
