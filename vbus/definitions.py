@@ -15,12 +15,13 @@ class Definition(ABC):
     def __init__(self):
         pass
 
-    @abstractmethod
     def search_path(self, parts: List[str]) -> 'Definition' or None:
         """ Search for a path in this definition.
             It can returns a Definition class or a dictionary or none if not found.
         """
-        pass
+        if not parts:
+            return self
+        return None
 
     @abstractmethod
     async def handle_set(self, data: any, parts: List[str]):
@@ -73,11 +74,6 @@ class MethodDef(Definition):
     async def handle_set(self, data: any, parts: List[str]):
         return await self._method(data)
 
-    def search_path(self, parts: List[str]) -> Definition or None:
-        if not parts:
-            return self
-        return None
-
     def to_json(self) -> any:
         inspection = inspect.getfullargspec(self._method)
         ann = inspection.annotations
@@ -102,16 +98,12 @@ class MethodDef(Definition):
 class AttributeDef(Definition):
     def __init__(self, uuid: str, value: any):
         super().__init__()
+        assert value is not None, f"attribute {uuid} must not be null, use instead an EmptyAttrDef"
         self._key = uuid
         self._value = value
 
     async def handle_set(self, data: any, parts: List[str]):
         pass
-
-    def search_path(self, parts: List[str]) -> Definition or None:
-        if not parts:
-            return self
-        return None
 
     def to_json(self) -> any:
         return {
@@ -129,6 +121,25 @@ class AttributeDef(Definition):
             return schema
         except genson.schema.node.SchemaGenerationError as e:
             raise TypeError(f"Invalid attribute type for {self._key}, type is {type(self._value)} ({str(e)})")
+
+
+class EmptyAttrDef(Definition):
+    """ Used to declare an attribute without value at the declaration moment. """
+    def __init__(self, uuid: str, type_json_schema: dict):
+        super().__init__()
+        self._key = uuid
+        self._type = type_json_schema
+
+    async def handle_set(self, data: any, parts: List[str]):
+        pass
+
+    def to_json(self) -> any:
+        return {
+            'schema': self._type,
+        }
+
+    def to_schema(self) -> any:
+        pass
 
 
 class NodeDef(Definition):
@@ -190,3 +201,10 @@ class NodeDef(Definition):
         schema.pop("$schema", None)
         schema.pop("required", None)
         return schema
+
+
+# some aliases
+N = NodeDef
+A = AttributeDef
+EA = EmptyAttrDef
+M = MethodDef

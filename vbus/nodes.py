@@ -73,7 +73,7 @@ class Node:
         """ Retrieve an attribute proxy. """
         node_def = self._definition.search_path(list(parts))
         if node_def:
-            return proxies.AttributeProxy(self._nats, self.path + "." + ".".join(parts))
+            return proxies.AttributeProxy(self._nats, self.path + "." + ".".join(parts), node_def)
         else:
             return None
 

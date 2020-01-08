@@ -22,8 +22,19 @@ class Proxy:
 
 class AttributeProxy(Proxy):
     """ Represents remote attributes actions. """
-    def __init__(self, nats: ExtendedNatsClient, path: str):
+    def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
         super().__init__(nats, path)
+        self._attr_def = attr_def
+
+    @property
+    def value(self):
+        if "value" in self._attr_def:
+            return self._attr_def["value"]
+
+    @property
+    def schema(self):
+        if "schema" in self._attr_def:
+            return self._attr_def["schema"]
 
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
@@ -58,8 +69,12 @@ class NodeProxy(Proxy):
             yield k, NodeProxy(self._nats, join_path(self._path, k), v)
 
     async def get_attribute(self, *parts: str) -> AttributeProxy:
-        # TODO: check existence or retrieve
-        return AttributeProxy(self._nats, join_path(self._path, *parts))
+        attr_def = get_path_in_dict(self._node_json, *parts)
+        if not attr_def:
+            # TODO: implement fetch
+            raise NotImplementedError("Lazy loading nodes is not yet implemented, consider loading the parent first")
+        else:
+            return AttributeProxy(self._nats, join_path(self._path, *parts), attr_def)
 
     async def get_node(self, *parts: str) -> 'NodeProxy' or None:
         n = get_path_in_dict(self._node_json, *parts)
