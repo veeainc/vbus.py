@@ -87,8 +87,12 @@ class MethodDef(Definition):
         return_schema = {"type": MethodDef.py_types_to_json_schema[ann['return']]}
 
         return {
-            "params": params_schema,
-            "returns": return_schema,
+            "params": {
+                "schema": params_schema
+            },
+            "returns": {
+                "schema": return_schema
+            },
         }
 
     def to_schema(self) -> any:
