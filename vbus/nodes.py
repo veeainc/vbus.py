@@ -161,7 +161,7 @@ class NodeManager(Node):
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
         level = None
-        if "max_level" in data:
+        if data and isinstance(data, dict) and "max_level" in data:
             level = data["max_level"]
             data = {self._nats.hostname: self._definition.to_json()}
             prune_dict(data, level)
