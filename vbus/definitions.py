@@ -72,7 +72,10 @@ class MethodDef(Definition):
             raise ValueError("you must annotate return value, even if its None.")
 
     async def handle_set(self, data: any, parts: List[str]):
-        return await self._method(data)
+        if isinstance(data, list):
+            return await self._method(*data)
+        else:
+            return await self._method()
 
     def to_json(self) -> any:
         inspection = inspect.getfullargspec(self._method)
