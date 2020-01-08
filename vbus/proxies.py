@@ -39,6 +39,9 @@ class AttributeProxy(Proxy):
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
+    async def get_value(self, in_cache=False, timeout=1):
+        return await self._nats.async_request(self._path + ".value.get", {"in_cache": in_cache}, with_host=False, with_id=False, timeout=timeout)
+
     async def subscribe_set(self, on_set: Callable):
         sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=on_set, with_id=False, with_host=False)
         self._sids.append(sis)

@@ -23,10 +23,13 @@ class Definition(ABC):
             return self
         return None
 
-    @abstractmethod
     async def handle_set(self, data: any, parts: List[str]):
         """ Tells how to handle a set request from Vbus. """
         pass
+
+    async def handle_get(self, data: any, parts: List[str]):
+        """ Tells how to handle a set request from Vbus. """
+        return self.to_json()
 
     @abstractmethod
     def to_json(self) -> any:
@@ -109,9 +112,6 @@ class AttributeDef(Definition):
         self._key = uuid
         self._value = value
 
-    async def handle_set(self, data: any, parts: List[str]):
-        pass
-
     def to_json(self) -> any:
         return {
             'schema': self.to_schema(),
@@ -132,17 +132,44 @@ class AttributeDef(Definition):
 
 class EmptyAttrDef(Definition):
     """ Used to declare an attribute without value at the declaration moment. """
-    def __init__(self, uuid: str, type_json_schema: dict, on_set: Callable = None):
+    def __init__(self, uuid: str, type_json_schema: dict,
+                 on_set: Callable = None,
+                 on_get: Callable = None):
         super().__init__()
         self._key = uuid
         self._type = type_json_schema
         self._on_set = on_set
+        self._on_get = on_get
 
     async def handle_set(self, data: any, parts: List[str]):
         if self._on_set:
             return await self._on_set(data, parts)
         else:
             return None
+
+    async def handle_get(self, data: any, parts: List[str]):
+        if parts[-1] == "value":
+            # request to read value
+            if isinstance(data, dict) and "in_cache" in data and data["in_cache"]:
+                # from cache
+                return None  # TODO: handle cache
+            else:
+                if self._on_get:
+                    return await self._on_get(data, parts)
+                else:
+                    return None
+        else:
+            return self.to_json()
+
+    def search_path(self, parts: List[str]) -> 'Definition' or None:
+        """ Search for a path in this definition.
+            It can returns a Definition class or a dictionary or none if not found.
+        """
+        if not parts:
+            return self
+        elif parts == ['value']:
+            return self
+        return None
 
     def to_json(self) -> any:
         return {

@@ -179,6 +179,14 @@ class NodeManager(Node):
             except Exception as e:
                 LOGGER.exception(e)
 
+    async def handle_get(self, parts: List[str], data) -> Node:
+        node_builder = self._definition.search_path(parts)
+        if node_builder:
+            try:
+                return await node_builder.handle_get(data, parts)
+            except Exception as e:
+                LOGGER.exception(e)
+
     async def _on_get_path(self, data, path: str):
         """ Get a specific path in a node. """
         parts = path.split('.')
@@ -187,9 +195,7 @@ class NodeManager(Node):
 
         method = parts.pop()
         if method == "get":
-            definition = self._definition.search_path(parts)
-            if definition:
-                return definition.to_json()
+            return await self.handle_get(parts, data)
         elif method == "set":
             return await self.handle_set(parts, data)
         return None
