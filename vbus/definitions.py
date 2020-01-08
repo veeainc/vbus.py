@@ -132,13 +132,17 @@ class AttributeDef(Definition):
 
 class EmptyAttrDef(Definition):
     """ Used to declare an attribute without value at the declaration moment. """
-    def __init__(self, uuid: str, type_json_schema: dict):
+    def __init__(self, uuid: str, type_json_schema: dict, on_set: Callable = None):
         super().__init__()
         self._key = uuid
         self._type = type_json_schema
+        self._on_set = on_set
 
     async def handle_set(self, data: any, parts: List[str]):
-        pass
+        if self._on_set:
+            return await self._on_set(data, parts)
+        else:
+            return None
 
     def to_json(self) -> any:
         return {
@@ -153,11 +157,11 @@ class NodeDef(Definition):
     """ A node definition.
         It holds a user structure (Python object) and optional callbacks.
     """
-    def __init__(self, node_def: Dict, on_write: Callable = None):
+    def __init__(self, node_def: Dict, on_set: Callable = None):
         super().__init__()
         self._initialize_structure(node_def)
         self._structure = node_def
-        self._on_write = on_write
+        self._on_set = on_set
 
     def _initialize_structure(self, node_def: Dict):
         """ Take a node definition (raw dict) and replace them with attributes and nodes. """
@@ -181,8 +185,8 @@ class NodeDef(Definition):
         return builder
 
     async def handle_set(self, data: any, parts: List[str]):
-        if self._on_write:
-            return await self._on_write(data, parts)
+        if self._on_set:
+            return await self._on_set(data, parts)
         else:
             return None
 

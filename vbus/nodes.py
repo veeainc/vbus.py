@@ -48,7 +48,7 @@ class Node:
     async def add_node(self, uuid: str, node_raw_def: Dict, on_write: Callable = None) -> 'Node':
         """ Add a child node and notify Vbus. """
         assert isinstance(self._definition, definitions.NodeDef)
-        node_def = definitions.NodeDef(node_raw_def, on_write=on_write)
+        node_def = definitions.NodeDef(node_raw_def, on_set=on_write)
         self._definition.add_child(uuid, node_def)
         node = Node(self._nats, uuid, node_def, self)
 
