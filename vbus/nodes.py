@@ -178,6 +178,9 @@ class NodeManager(Node):
                 return await node_builder.handle_set(data, parts)
             except Exception as e:
                 LOGGER.exception(e)
+                return definitions.ErrorDefinition.InternalError(e).to_json()
+        else:
+            return definitions.ErrorDefinition.PathNotFoundError().to_json()
 
     async def handle_get(self, parts: List[str], data) -> Node:
         node_builder = self._definition.search_path(parts)
@@ -186,6 +189,9 @@ class NodeManager(Node):
                 return await node_builder.handle_get(data, parts)
             except Exception as e:
                 LOGGER.exception(e)
+                return definitions.ErrorDefinition.InternalError(e).to_json()
+        else:
+            return definitions.ErrorDefinition.PathNotFoundError().to_json()
 
     async def _on_get_path(self, data, path: str):
         """ Get a specific path in a node. """

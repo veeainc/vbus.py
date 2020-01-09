@@ -36,10 +36,35 @@ class Definition(ABC):
         """ Get the Json representation (as a Python Object)."""
         pass
 
-    @abstractmethod
-    def to_schema(self) -> any:
-        """ Get the Json Schema representation (as a Python Object)."""
-        pass
+
+class ErrorDefinition(Definition):
+    def __init__(self, code: int, message: str, detail:str = None):
+        super().__init__()
+        self._code = code
+        self._msg = message
+        self._detail = detail
+
+    """ Represents an error. """
+    def to_json(self) -> any:
+        """ Get the Json representation (as a Python Object)."""
+        if self._detail:
+            return {
+                "code": self._code,
+                "message": self._msg,
+                "detail": self._detail,
+            }
+        else:
+            return {
+                "code": self._code,
+                "message": self._msg
+            }
+
+
+    @staticmethod
+    def PathNotFoundError(): return ErrorDefinition(404, "not found")
+
+    @staticmethod
+    def InternalError(e: Exception): return ErrorDefinition(500, "internal server error", str(e))
 
 
 class MethodDef(Definition):
@@ -100,9 +125,6 @@ class MethodDef(Definition):
                 "schema": return_schema
             },
         }
-
-    def to_schema(self) -> any:
-        return None
 
 
 class AttributeDef(Definition):
@@ -175,9 +197,6 @@ class EmptyAttrDef(Definition):
         return {
             'schema': self._type,
         }
-
-    def to_schema(self) -> any:
-        pass
 
 
 class NodeDef(Definition):
