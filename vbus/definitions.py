@@ -111,6 +111,8 @@ class MethodDef(Definition):
 
         params_schema = {"type": "array", "items": []}
         for arg in inspection.args:
+            if arg == 'self':
+                continue
             params_schema["items"].append({
                 "type": MethodDef.py_types_to_json_schema[ann[arg]],
                 "description": arg
