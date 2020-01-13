@@ -6,8 +6,12 @@
 """
 import inspect
 import genson
+import logging
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Definition(ABC):
@@ -130,19 +134,27 @@ class MethodDef(Definition):
 
 
 class AttributeDef(Definition):
-    def __init__(self, uuid: str, value: any):
+    def __init__(self, uuid: str,
+                 value: any = None,
+                 schema: dict = None,
+                 on_set: Callable = None,
+                 on_get: Callable = None):
         super().__init__()
-        assert value is not None, f"attribute {uuid} must not be null, use instead an EmptyAttrDef"
+
+        if value is None and schema is None:
+            LOGGER.warning(f"attribute {uuid} is null, and no schema is specified.")
+
         self._key = uuid
         self._value = value
+        self._on_set = on_set
+        self._on_get = on_get
 
-    def to_json(self) -> any:
-        return {
-            'schema': self.to_schema(),
-            'value': self._value,
-        }
+        if schema is None:
+            self._schema = self.to_schema(self._value)
+        else:
+            self._schema = schema
 
-    def to_schema(self) -> any:
+    def to_schema(self, value: any) -> any:
         # we use genson library to determine schema type:
         try:
             builder = genson.SchemaBuilder()
@@ -153,17 +165,16 @@ class AttributeDef(Definition):
         except genson.schema.node.SchemaGenerationError as e:
             raise TypeError(f"Invalid attribute type for {self._key}, type is {type(self._value)} ({str(e)})")
 
-
-class EmptyAttrDef(Definition):
-    """ Used to declare an attribute without value at the declaration moment. """
-    def __init__(self, uuid: str, type_json_schema: dict,
-                 on_set: Callable = None,
-                 on_get: Callable = None):
-        super().__init__()
-        self._key = uuid
-        self._type = type_json_schema
-        self._on_set = on_set
-        self._on_get = on_get
+    def to_json(self) -> any:
+        if self._value is None:
+            return {
+                "schema": self._schema
+            }
+        else:
+            return {
+                'schema': self._schema,
+                'value': self._value,
+            }
 
     async def handle_set(self, data: any, parts: List[str]):
         if self._on_set:
@@ -194,11 +205,6 @@ class EmptyAttrDef(Definition):
         elif parts == ['value']:
             return self
         return None
-
-    def to_json(self) -> any:
-        return {
-            'schema': self._type,
-        }
 
 
 class NodeDef(Definition):
@@ -268,5 +274,4 @@ class NodeDef(Definition):
 # some aliases
 N = NodeDef
 A = AttributeDef
-EA = EmptyAttrDef
 M = MethodDef
