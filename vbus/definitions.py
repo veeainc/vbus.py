@@ -119,7 +119,7 @@ class MethodDef(Definition):
                 continue
             params_schema["items"].append({
                 "type": MethodDef.py_types_to_json_schema[ann[arg]],
-                "description": arg
+                "title": arg
             })
         return_schema = {"type": MethodDef.py_types_to_json_schema[ann['return']]}
 
