@@ -10,12 +10,12 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
 
-
 LOGGER = logging.getLogger(__name__)
 
 
 class Definition(ABC):
     """ Base class for creating an element definition. """
+
     def __init__(self):
         pass
 
@@ -42,13 +42,14 @@ class Definition(ABC):
 
 
 class ErrorDefinition(Definition):
-    def __init__(self, code: int, message: str, detail:str = None):
+    def __init__(self, code: int, message: str, detail: str = None):
         super().__init__()
         self._code = code
         self._msg = message
         self._detail = detail
 
     """ Represents an error. """
+
     def to_json(self) -> any:
         """ Get the Json representation (as a Python Object)."""
         if self._detail:
@@ -63,22 +64,35 @@ class ErrorDefinition(Definition):
                 "message": self._msg
             }
 
+    @staticmethod
+    def PathNotFoundError():
+        return ErrorDefinition(404, "not found")
 
     @staticmethod
-    def PathNotFoundError(): return ErrorDefinition(404, "not found")
-
-    @staticmethod
-    def InternalError(e: Exception): return ErrorDefinition(500, "internal server error", str(e))
+    def InternalError(e: Exception):
+        return ErrorDefinition(500, "internal server error", str(e))
 
 
 class MethodDef(Definition):
     """ A Method definition.
         It holds a user callback.
     """
-    def __init__(self, method: Callable):
+
+    def __init__(self, method: Callable, params_schema: Dict = None, returns_schema: Dict = None):
         super().__init__()
         self._method = method
         self._name = method.__name__
+        self._params_schema = params_schema
+        self._returns_schema = returns_schema
+
+        if params_schema is None or returns_schema is None:
+            self.validate_callback()
+            # try to get json schema from method definition:
+            inspect_params, inspect_returns = self._inspect_method()
+            if params_schema is None:
+                self._params_schema = inspect_params
+            if returns_schema is None:
+                self._returns_schema = inspect_returns
 
     # Convert a Python type to a Json Schema one.
     py_types_to_json_schema = {
@@ -109,7 +123,7 @@ class MethodDef(Definition):
         else:
             return await self._method()
 
-    def to_json(self) -> any:
+    def _inspect_method(self) -> (dict, dict):
         inspection = inspect.getfullargspec(self._method)
         ann = inspection.annotations
 
@@ -123,13 +137,16 @@ class MethodDef(Definition):
             })
         return_schema = {"type": MethodDef.py_types_to_json_schema[ann['return']]}
 
+        return params_schema, return_schema
+
+    def to_json(self) -> any:
         return {
             "params": {
-                "schema": params_schema
+                "schema": self._params_schema
             },
             "returns": {
-                "schema": return_schema
-            },
+                "schema": self._returns_schema
+            }
         }
 
 
@@ -211,6 +228,7 @@ class NodeDef(Definition):
     """ A node definition.
         It holds a user structure (Python object) and optional callbacks.
     """
+
     def __init__(self, node_def: Dict, on_set: Callable = None):
         super().__init__()
         self._initialize_structure(node_def)
