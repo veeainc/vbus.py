@@ -28,7 +28,6 @@ class ExtendedNatsClient:
             self._root_folder = self._env['HOME']
             self._root_folder = self._root_folder + "/vbus/"
         self._nats = Client()
-        self._remote_host = remote_host
 
     @property
     def hostname(self) -> str:
