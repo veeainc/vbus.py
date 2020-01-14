@@ -103,6 +103,8 @@ class MethodProxy(Proxy):
         super().__init__(nats, path)
         self._node_def = node_def
 
-    async def call(self, *args: any, timeout_sec: float = 0.5):
-        return await self._nats.async_request(self._path + ".set", tuple(args), with_host=False, with_id=False,
+    async def call(self, *args: any, timeout_sec: float = 0.5,  with_host=False, with_id=False,):
+        return await self._nats.async_request(self._path + ".set", tuple(args),
+                                              with_host=with_host,
+                                              with_id=with_id,
                                               timeout=timeout_sec)
