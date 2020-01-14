@@ -17,9 +17,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, loop=None):
+    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None):
         self._loop = loop or asyncio.get_event_loop()
         self._hostname: str = get_hostname()
+        self._remote_host: str = remote_host or self._hostname
         self._id = f"{app_domain}.{app_id}"
         self._env = self._read_env_vars()
         self._root_folder = self._env[VBUS_PATH]
@@ -27,10 +28,15 @@ class ExtendedNatsClient:
             self._root_folder = self._env['HOME']
             self._root_folder = self._root_folder + "/vbus/"
         self._nats = Client()
+        self._remote_host = remote_host
 
     @property
     def hostname(self) -> str:
         return self._hostname
+
+    @property
+    def remote_hostname(self) -> str:
+        return self._remote_host
 
     @property
     def id(self) -> str:
@@ -68,7 +74,7 @@ class ExtendedNatsClient:
                            user="anonymous", password="anonymous",
                            connect_timeout=1, max_reconnect_attempts=2)
         data = json.dumps(config["auth"]).encode('utf-8')
-        await nats.publish("system.authorization." + self._hostname + ".add", data)
+        await nats.publish("system.authorization." + self._remote_host + ".add", data)
         await nats.flush()
         await nats.close()
         await asyncio.sleep(3)  # wait server restart
@@ -148,7 +154,7 @@ class ExtendedNatsClient:
                     "path": self._id,
                     "name": self._id,
                     "host": self._hostname,
-                    "uuid": f"{self._hostname}.{self._id}",
+                    "uuid": f"{self._id}.{self._hostname}",
                     "bridge": "None",
                 },
                 "auth": {

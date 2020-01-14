@@ -45,15 +45,19 @@ class Node:
         else:
             return self._uuid
 
-    async def add_node(self, uuid: str, node_raw_def: Dict, on_write: Callable = None) -> 'Node':
+    async def add_node(self, uuid: str, node_raw_def: Dict or Definition, on_write: Callable = None) -> 'Node':
         """ Add a child node and notify Vbus. """
         assert isinstance(self._definition, definitions.NodeDef)
-        node_def = definitions.NodeDef(node_raw_def, on_set=on_write)
+
+        node_def = node_raw_def
+        if not isinstance(node_raw_def, Definition):
+            node_def = definitions.NodeDef(node_raw_def, on_set=on_write)
+
         self._definition.add_child(uuid, node_def)
         node = Node(self._nats, uuid, node_def, self)
 
         # send the node definition on Vbus
-        data = {uuid: node_def.to_json()}
+        data = {uuid: await node_def.to_json()}
         await self._nats.async_publish(join_path(self.path, "add"), data)
         return Node(self._nats, uuid, node_def, self)
 
@@ -66,12 +70,12 @@ class Node:
             LOGGER.warning('trying to remove unknown node: %s', uuid)
             return
 
-        data = {uuid: node_def.to_json()}
+        data = {uuid: await node_def.to_json()}
         await self._nats.async_publish(join_path(self.path, "del"), data)
 
     async def get_attribute(self, *parts: str) -> Optional[proxies.AttributeProxy]:
         """ Retrieve an attribute proxy. """
-        node_def = self._definition.search_path(list(parts))
+        node_def = await self._definition.search_path(list(parts))
         if node_def:
             return proxies.AttributeProxy(self._nats, self.path + "." + ".".join(parts), node_def)
         else:
@@ -80,7 +84,7 @@ class Node:
     async def get_method(self, *parts: str) -> Optional[proxies.MethodProxy]:
         """ Retrieve a method proxy. """
         # check if already loaded
-        method_def = self._definition.search_path(list(parts))
+        method_def = await self._definition.search_path(list(parts))
         if method_def:
             return proxies.MethodProxy(self._nats, join_path(self.path, *parts), method_def)
         else:
@@ -91,7 +95,7 @@ class Node:
     async def get_node(self, *parts: str) -> Optional[proxies.NodeProxy]:
         """ Retrieve a node proxy. """
         # check if already loaded
-        node_def = self._definition.search_path(list(parts))
+        node_def = await self._definition.search_path(list(parts))
         if node_def:
             return proxies.NodeProxy(self._nats, join_path(self.path, *parts), node_def)
         else:
@@ -114,7 +118,7 @@ class Node:
         self._definition.add_child(uuid, method_def)
         node = Node(self._nats, uuid, method_def, self)
 
-        data = {uuid: method_def.to_json()}
+        data = {uuid: await method_def.to_json()}
         await self._nats.async_publish(join_path(self.path, "add"), data)
         return node
 
@@ -163,35 +167,35 @@ class NodeManager(Node):
         level = None
         if data and isinstance(data, dict) and "max_level" in data:
             level = data["max_level"]
-            data = {self._nats.hostname: self._definition.to_json()}
+            data = {self._nats.hostname: await self._definition.to_json()}
             prune_dict(data, level)
             return data
         else:
             return {
-                self._nats.hostname: self._definition.to_json()
+                self._nats.hostname: await self._definition.to_json()
             }
 
     async def handle_set(self, parts: List[str], data) -> Node:
-        node_builder = self._definition.search_path(parts)
+        node_builder = await self._definition.search_path(parts)
         if node_builder:
             try:
                 return await node_builder.handle_set(data, parts)
             except Exception as e:
                 LOGGER.exception(e)
-                return definitions.ErrorDefinition.InternalError(e).to_json()
+                return await definitions.ErrorDefinition.InternalError(e).to_json()
         else:
-            return definitions.ErrorDefinition.PathNotFoundError().to_json()
+            return await definitions.ErrorDefinition.PathNotFoundError().to_json()
 
     async def handle_get(self, parts: List[str], data) -> Node:
-        node_builder = self._definition.search_path(parts)
+        node_builder = await self._definition.search_path(parts)
         if node_builder:
             try:
                 return await node_builder.handle_get(data, parts)
             except Exception as e:
                 LOGGER.exception(e)
-                return definitions.ErrorDefinition.InternalError(e).to_json()
+                return await definitions.ErrorDefinition.InternalError(e).to_json()
         else:
-            return definitions.ErrorDefinition.PathNotFoundError().to_json()
+            return await definitions.ErrorDefinition.PathNotFoundError().to_json()
 
     async def _on_get_path(self, data, path: str):
         """ Get a specific path in a node. """

@@ -8,7 +8,7 @@ import inspect
 import genson
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Awaitable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class Definition(ABC):
     def __init__(self):
         pass
 
-    def search_path(self, parts: List[str]) -> 'Definition' or None:
+    async def search_path(self, parts: List[str]) -> 'Definition' or None:
         """ Search for a path in this definition.
             It can returns a Definition class or a dictionary or none if not found.
         """
@@ -33,10 +33,10 @@ class Definition(ABC):
 
     async def handle_get(self, data: any, parts: List[str]):
         """ Tells how to handle a set request from Vbus. """
-        return self.to_json()
+        return await self.to_json()
 
     @abstractmethod
-    def to_json(self) -> any:
+    async def to_json(self) -> any:
         """ Get the Json representation (as a Python Object)."""
         pass
 
@@ -50,7 +50,7 @@ class ErrorDefinition(Definition):
 
     """ Represents an error. """
 
-    def to_json(self) -> any:
+    async def to_json(self) -> any:
         """ Get the Json representation (as a Python Object)."""
         if self._detail:
             return {
@@ -139,7 +139,7 @@ class MethodDef(Definition):
 
         return params_schema, return_schema
 
-    def to_json(self) -> any:
+    async def to_json(self) -> any:
         return {
             "params": {
                 "schema": self._params_schema
@@ -182,7 +182,7 @@ class AttributeDef(Definition):
         except genson.schema.node.SchemaGenerationError as e:
             raise TypeError(f"Invalid attribute type for {self._key}, type is {type(self._value)} ({str(e)})")
 
-    def to_json(self) -> any:
+    async def to_json(self) -> any:
         if self._value is None:
             return {
                 "schema": self._schema
@@ -209,11 +209,11 @@ class AttributeDef(Definition):
                 if self._on_get:
                     return await self._on_get(data, parts)
                 else:
-                    return None
+                    return self._value
         else:
-            return self.to_json()
+            return await self.to_json()
 
-    def search_path(self, parts: List[str]) -> 'Definition' or None:
+    async def search_path(self, parts: List[str]) -> 'Definition' or None:
         """ Search for a path in this definition.
             It can returns a Definition class or a dictionary or none if not found.
         """
@@ -229,7 +229,7 @@ class NodeDef(Definition):
         It holds a user structure (Python object) and optional callbacks.
     """
 
-    def __init__(self, node_def: Dict, on_set: Callable = None):
+    def __init__(self, node_def: Dict, on_set: Callable = None, ):
         super().__init__()
         self._initialize_structure(node_def)
         self._structure = node_def
@@ -262,34 +262,46 @@ class NodeDef(Definition):
         else:
             return None
 
-    def search_path(self, parts: List[str]) -> Definition or None:
+    async def search_path(self, parts: List[str]) -> Definition or None:
         if not parts:
             return self
         elif parts[0] in self._structure:
-            return self._structure[parts[0]].search_path(parts[1:])
+            return await self._structure[parts[0]].search_path(parts[1:])
         return None
 
-    def to_json(self) -> any:
-        return {k: v.to_json() for k, v in self._structure.items()}
+    async def to_json(self) -> any:
+        return {k: await v.to_json() for k, v in self._structure.items()}
 
-    def to_schema(self) -> any:
-        # we use genson library to determine schema type:
-        builder = genson.SchemaBuilder()
 
-        for k, v in self._structure.items():
-            if isinstance(v, AttributeDef):
-                builder.add_object({k: v.to_schema()})
-            elif isinstance(v, NodeDef):
-                builder.add_object({k: {}})
+AsyncNodeDefCallable = Callable[[], Awaitable[Dict or Definition]]
 
-        # clean unused properties
-        schema = builder.to_schema()
-        schema.pop("$schema", None)
-        schema.pop("required", None)
-        return schema
+
+class AsyncNodeDef(Definition):
+    """ A node definition that rebuild the definition whenever its needed.
+    """
+
+    def __init__(self, on_create_node: AsyncNodeDefCallable):
+        super().__init__()
+        self._on_create_node = on_create_node
+
+    async def _get_node(self) -> Definition:
+        """ Create the node. """
+        return NodeDef(await self._on_create_node())
+
+    async def handle_set(self, data: any, parts: List[str]):
+        pass  # not implemented for now
+
+    async def search_path(self, parts: List[str]) -> Definition or None:
+        node = await self._get_node()
+        return await node.search_path(parts)
+
+    async def to_json(self) -> any:
+        node = await self._get_node()
+        return await node.to_json()
 
 
 # some aliases
 N = NodeDef
+AN = AsyncNodeDef
 A = AttributeDef
 M = MethodDef
