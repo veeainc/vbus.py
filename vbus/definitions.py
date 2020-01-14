@@ -106,11 +106,11 @@ class MethodDef(Definition):
     def validate_callback(self):
         inspection = inspect.getfullargspec(self._method)
         for arg in inspection.args:
-            if arg == 'self':
+            if arg in ['self', 'kwargs', 'args']:
                 continue
             if arg not in inspection.annotations:
                 raise ValueError("you must annotate your callback with type annotation (see "
-                                 "https://docs.python.org/3/library/typing.html).")
+                                 "https://docs.python.org/3/library/typing.html) or pass schema in constructor.")
             if inspection.annotations[arg] not in MethodDef.py_types_to_json_schema:
                 raise ValueError(str(inspection.annotations[arg]) + " is not a supported python type.")
 
@@ -119,9 +119,9 @@ class MethodDef(Definition):
 
     async def handle_set(self, data: any, parts: List[str]):
         if isinstance(data, list):
-            return await self._method(*data)
+            return await self._method(*(data or [None]), parts=parts)
         else:
-            return await self._method()
+            return await self._method(None, parts=parts)
 
     def _inspect_method(self) -> (dict, dict):
         inspection = inspect.getfullargspec(self._method)
