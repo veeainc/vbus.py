@@ -43,7 +43,11 @@ class AttributeProxy(Proxy):
         return await self._nats.async_request(self._path + ".value.get", {"in_cache": in_cache}, with_host=False, with_id=False, timeout=timeout)
 
     async def subscribe_set(self, on_set: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=on_set, with_id=False, with_host=False)
+        async def wrap_raw_node(raw_node):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_set(node)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 
@@ -56,6 +60,9 @@ class NodeProxy(Proxy):
     @property
     def tree(self) -> Dict:
         return self._node_json
+
+    def __str__(self):
+        return str(self.tree)
 
     async def get_method(self, *parts: str) -> 'MethodProxy' or None:
         node_json = get_path_in_dict(self._node_json, *parts)
@@ -89,11 +96,19 @@ class NodeProxy(Proxy):
         return self._node_json[item]
 
     async def subscribe_add(self, on_add: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "add"), cb=on_add, with_id=False, with_host=False)
+        async def wrap_raw_node(raw_node):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_add(node)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, "add"), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_del(self, on_del: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "del"), cb=on_del, with_id=False, with_host=False)
+        async def wrap_raw_node(raw_node):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_del(node)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, "del"), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 
