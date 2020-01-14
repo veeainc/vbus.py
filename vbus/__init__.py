@@ -1,2 +1,1 @@
-# vBus api for Python
-# veea.com
+from .bridges import Client
