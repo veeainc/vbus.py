@@ -108,3 +108,7 @@ class MethodProxy(Proxy):
                                               with_host=with_host,
                                               with_id=with_id,
                                               timeout=timeout_sec)
+
+    async def subscribe_set(self, on_set: Callable):
+        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=on_set, with_id=False, with_host=False)
+        self._sids.append(sis)
