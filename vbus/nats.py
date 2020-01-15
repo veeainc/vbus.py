@@ -17,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, remote_host: str = None, loop=None):
+    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None):
         """
         Create an extended nats client.
         :param app_domain:  for now: system

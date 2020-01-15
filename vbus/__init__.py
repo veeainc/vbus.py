@@ -8,8 +8,8 @@ LOGGER = logging.getLogger(__name__)
 class Client(NodeManager):
     """ A simple Vbus client that allows you to discover other bridges.
         For creating a new bridge use Bridge class. """
-    def __init__(self, app_domain: str, app_id: str, remote_host: str = None, loop=None):
-        self._nats = ExtendedNatsClient(app_domain, app_id, remote_host, loop)
+    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None):
+        self._nats = ExtendedNatsClient(app_domain, app_id, loop, remote_host)
         super().__init__(self._nats)
 
     @property
