@@ -17,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None):
+    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None, nats_url: str = None):
         """
         Create an extended nats client.
         :param app_domain:  for now: system
@@ -26,6 +26,7 @@ class ExtendedNatsClient:
         :param loop: asyncio loop
         """
         self._loop = loop or asyncio.get_event_loop()
+        self._nats_url = nats_url
         self._hostname: str = get_hostname()
         self._remote_host: str = remote_host or self._hostname
         self._id = f"{app_domain}.{app_id}"
@@ -99,6 +100,10 @@ class ExtendedNatsClient:
         await asyncio.sleep(2)  # wait server restart
 
     async def _find_vbus_url(self, config):
+        # find Vbus server - strategy 0: get from argument
+        def get_from_argument() -> str:
+            return self._nats_url
+
         # find Vbus server - strategy 1: get url from config file
         def get_from_config_file() -> str:
             return config["vbus"]["url"]
@@ -117,6 +122,7 @@ class ExtendedNatsClient:
             return zeroconf_search()
 
         find_server_url_strategies = [
+            get_from_argument,
             get_from_config_file,
             get_from_env,
             get_default,
