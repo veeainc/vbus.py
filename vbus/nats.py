@@ -17,7 +17,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None):
+    def __init__(self, app_domain: str, app_id: str, remote_host: str = None, loop=None):
+        """
+        Create an extended nats client.
+        :param app_domain:  for now: system
+        :param app_id: app name
+        :param remote_host: optional, the remote hostname to use to login
+        :param loop: asyncio loop
+        """
         self._loop = loop or asyncio.get_event_loop()
         self._hostname: str = get_hostname()
         self._remote_host: str = remote_host or self._hostname
@@ -56,18 +63,31 @@ class ExtendedNatsClient:
     async def async_connect(self):
         config = self._read_or_create_config_file()
         server_url = await self._find_vbus_url(config)
+
+        # update the config file with the new url
         config["vbus"]["url"] = server_url
         self._save_config_file(config)
-        await self._publish_auth(server_url, config)
+
+        await self._publish_user(server_url, config)
         await asyncio.sleep(1, loop=self._loop)
         await self._nats.connect(server_url, io_loop=self._loop, user=config["auth"]["user"],
                                  password=config["private"]["key"], connect_timeout=1, max_reconnect_attempts=2,
                                  name=config["auth"]["user"], closed_cb=self._async_nats_closed)
 
+    async def ask_permission(self, permission) -> bool:
+        config = self._read_or_create_config_file()
+        config["auth"]["permissions"]["subscribe"].append(permission)
+        config["auth"]["permissions"]["publish"].append(permission)
+        path = f"system.authorization.{self._remote_host}.{self._id}.{self._hostname}.permissions.set"
+
+        resp = await self.async_request(path, config["auth"]["permissions"], timeout=10, with_id=False, with_host=False)
+        self._save_config_file(config)
+        return resp
+
     async def _async_nats_closed(self):
         await self._nats.close()
 
-    async def _publish_auth(self, server_url: str, config):
+    async def _publish_user(self, server_url: str, config):
         nats = Client()
         await nats.connect(server_url, loop=self._loop,
                            user="anonymous", password="anonymous",
@@ -76,7 +96,7 @@ class ExtendedNatsClient:
         await nats.publish("system.authorization." + self._remote_host + ".add", data)
         await nats.flush()
         await nats.close()
-        await asyncio.sleep(3)  # wait server restart
+        await asyncio.sleep(2)  # wait server restart
 
     async def _find_vbus_url(self, config):
         # find Vbus server - strategy 1: get url from config file
@@ -228,7 +248,8 @@ class ExtendedNatsClient:
             path = '.'.join(filter(None, [self.id, path]))
         return path
 
-    async def async_request(self, path: str, data: any, timeout: float = 0.5, with_id: bool = True, with_host: bool = True) -> any:
+    async def async_request(self, path: str, data: any, timeout: float = 0.5, with_id: bool = True,
+                            with_host: bool = True) -> any:
         path = self._get_path(path, with_id, with_host)
         msg = await self._nats.request(path, to_vbus(data), timeout=timeout)
         return from_vbus(msg.data)
