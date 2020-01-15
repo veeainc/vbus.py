@@ -40,6 +40,11 @@ class Definition(ABC):
         """ Get the Json representation (as a Python Object)."""
         pass
 
+    @staticmethod
+    def is_attribute(node: any) -> bool:
+        """ Tells if a node is an attribute. """
+        return isinstance(node, dict) and "schema" in node
+
 
 class ErrorDefinition(Definition):
     def __init__(self, code: int, message: str, detail: str = None):

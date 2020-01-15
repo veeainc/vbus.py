@@ -1,7 +1,12 @@
-from typing import Callable, Dict
+"""
+    Proxies are object used to communicate with a remote VBus element.
+    For example, reading a remote attribute, calling a remote method.
+"""
+from typing import Callable, Dict, Iterator
 
 from .helpers import join_path, get_path_in_dict
 from .nats import ExtendedNatsClient
+from .definitions import Definition
 
 
 class Proxy:
@@ -16,6 +21,7 @@ class Proxy:
         return self._path
 
     async def unsubscribe(self):
+        """ Unsubscribe from all. """
         for sid in self._sids:
             await self._nats.nats.unsubscribe(sid)
 
@@ -25,6 +31,14 @@ class AttributeProxy(Proxy):
     def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
         super().__init__(nats, path)
         self._attr_def = attr_def
+        self._name = path.split('.')[-1]
+
+    def __str__(self):
+        return f"{self._name} = {self.value} ({self.schema})"
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def value(self):
@@ -77,6 +91,21 @@ class NodeProxy(Proxy):
     def items(self):
         for k, v in self._node_json.items():
             yield k, NodeProxy(self._nats, join_path(self._path, k), v)
+
+    def attributes(self) -> Iterator[AttributeProxy]:
+        """ Yield only attributes. """
+        for k, n in self._node_json.items():
+            if Definition.is_attribute(n):
+                yield AttributeProxy(self._nats, join_path(self.path, k), n)
+
+    def attribute(self, name: str) -> AttributeProxy:
+        try:
+            return AttributeProxy(self._nats, join_path(self.path, name), self._node_json[name])
+        except:
+            raise TypeError(f"{name} is not an attribute, use node.has_attribute(\"{name}\") before")
+
+    def has_attribute(self, name: str):
+        return name in self._node_json and Definition.is_attribute(self._node_json[name])
 
     async def get_attribute(self, *parts: str) -> AttributeProxy:
         attr_def = get_path_in_dict(self._node_json, *parts)
