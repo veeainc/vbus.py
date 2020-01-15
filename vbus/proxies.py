@@ -15,10 +15,15 @@ class Proxy:
         self._nats = nats
         self._path = path
         self._sids = []
+        self._name = path.split('.')[-1]
 
     @property
     def path(self):
         return self._path
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     async def unsubscribe(self):
         """ Unsubscribe from all. """
@@ -31,14 +36,13 @@ class AttributeProxy(Proxy):
     def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
         super().__init__(nats, path)
         self._attr_def = attr_def
-        self._name = path.split('.')[-1]
 
     def __str__(self):
         return f"{self._name} = {self.value} ({self.schema})"
 
     @property
-    def name(self) -> str:
-        return self._name
+    def has_value(self):
+        return "value" in self._attr_def
 
     @property
     def value(self):
@@ -98,6 +102,18 @@ class NodeProxy(Proxy):
             if Definition.is_attribute(n):
                 yield AttributeProxy(self._nats, join_path(self.path, k), n)
 
+    def methods(self) -> Iterator['MethodProxy']:
+        """ Yield only nodes. """
+        for k, n in self._node_json.items():
+            if Definition.is_method(n):
+                yield MethodProxy(self._nats, join_path(self.path, k), n)
+
+    def nodes(self) -> Iterator['NodeProxy']:
+        """ Yield only nodes. """
+        for k, n in self._node_json.items():
+            if Definition.is_node(n):
+                yield NodeProxy(self._nats, join_path(self.path, k), n)
+
     def attribute(self, name: str) -> AttributeProxy:
         try:
             return AttributeProxy(self._nats, join_path(self.path, name), self._node_json[name])
@@ -106,6 +122,9 @@ class NodeProxy(Proxy):
 
     def has_attribute(self, name: str):
         return name in self._node_json and Definition.is_attribute(self._node_json[name])
+
+    def has_method(self, name: str):
+        return name in self._node_json and Definition.is_method(self._node_json[name])
 
     async def get_attribute(self, *parts: str) -> AttributeProxy:
         attr_def = get_path_in_dict(self._node_json, *parts)
@@ -146,6 +165,14 @@ class MethodProxy(Proxy):
     def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
         super().__init__(nats, path)
         self._node_def = node_def
+
+    @property
+    def params_schema(self):
+        return self._node_def["params"]["schema"]
+
+    @property
+    def returns_schema(self):
+        return self._node_def["returns"]["schema"]
 
     async def call(self, *args: any, timeout_sec: float = 0.5,  with_host=False, with_id=False,):
         return await self._nats.async_request(self._path + ".set", tuple(args),

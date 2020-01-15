@@ -45,6 +45,16 @@ class Definition(ABC):
         """ Tells if a node is an attribute. """
         return isinstance(node, dict) and "schema" in node
 
+    @staticmethod
+    def is_method(node: any) -> bool:
+        """ Tells if a node is an attribute. """
+        return isinstance(node, dict) and "params" in node and "returns" in node
+
+    @staticmethod
+    def is_node(node: any) -> bool:
+        """ Tells if a node is an attribute. """
+        return not Definition.is_attribute(node) and not Definition.is_method(node)
+
 
 class ErrorDefinition(Definition):
     def __init__(self, code: int, message: str, detail: str = None):
