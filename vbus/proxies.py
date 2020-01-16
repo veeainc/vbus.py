@@ -160,6 +160,28 @@ class NodeProxy(Proxy):
         self._sids.append(sis)
 
 
+class WildcardNodeProxy(Proxy):
+    """ Represents remote node actions on wildcard path ('*'). """
+    def __init__(self, nats: ExtendedNatsClient, path: str):
+        super().__init__(nats, path)
+
+    async def subscribe_add(self, *parts: str, on_add: Callable):
+        async def wrap_raw_node(raw_node, *args):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_add(node, *args)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "add"), cb=wrap_raw_node, with_id=False, with_host=False)
+        self._sids.append(sis)
+
+    async def subscribe_del(self, *parts: str, on_del: Callable):
+        async def wrap_raw_node(raw_node, *args):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_del(node, *args)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "del"), cb=wrap_raw_node, with_id=False, with_host=False)
+        self._sids.append(sis)
+
+
 class MethodProxy(Proxy):
     """ Represents remote method actions. """
     def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):

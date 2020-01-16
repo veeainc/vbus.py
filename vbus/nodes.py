@@ -90,12 +90,14 @@ class Node:
         """ Retrieve an attribute proxy. """
         return await self._get_element(*parts, cls=proxies.AttributeProxy)
 
-    async def get_method(self, *parts: str) -> Optional[proxies.MethodProxy]:
+    async def get_method(self, *parts: str) -> proxies.MethodProxy:
         """ Retrieve a method proxy. """
         return await self._get_element(*parts, cls=proxies.MethodProxy)
 
-    async def get_node(self, *parts: str) -> Optional[proxies.NodeProxy]:
+    async def get_node(self, *parts: str) -> proxies.NodeProxy or proxies.WildcardNodeProxy:
         """ Retrieve a node proxy. """
+        if "*" in list(parts):
+            return proxies.WildcardNodeProxy(self._nats, join_path(self.path, *parts))
         return await self._get_element(*parts, cls=proxies.NodeProxy)
 
     async def add_method(self, uuid: str, method: Callable) -> 'Node':
