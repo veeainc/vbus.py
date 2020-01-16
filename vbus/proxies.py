@@ -143,20 +143,20 @@ class NodeProxy(Proxy):
     def __getitem__(self, item):
         return self._node_json[item]
 
-    async def subscribe_add(self, on_add: Callable):
-        async def wrap_raw_node(raw_node):
+    async def subscribe_add(self, *parts: str, on_add: Callable):
+        async def wrap_raw_node(raw_node, *args):
             node = NodeProxy(self._nats, self._path, raw_node)
-            await on_add(node)
+            await on_add(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, "add"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "add"), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
-    async def subscribe_del(self, on_del: Callable):
-        async def wrap_raw_node(raw_node):
+    async def subscribe_del(self, *parts: str, on_del: Callable):
+        async def wrap_raw_node(raw_node, *args):
             node = NodeProxy(self._nats, self._path, raw_node)
-            await on_del(node)
+            await on_del(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, "del"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "del"), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 
