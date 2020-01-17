@@ -165,6 +165,14 @@ class WildcardNodeProxy(Proxy):
     def __init__(self, nats: ExtendedNatsClient, path: str):
         super().__init__(nats, path)
 
+    async def subscribe_set(self, *parts: str, on_set: Callable):
+        async def wrap_raw_node(raw_node, *args):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_set(node, *args)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "set"), cb=wrap_raw_node, with_id=False, with_host=False)
+        self._sids.append(sis)
+
     async def subscribe_add(self, *parts: str, on_add: Callable):
         async def wrap_raw_node(raw_node, *args):
             node = NodeProxy(self._nats, self._path, raw_node)
