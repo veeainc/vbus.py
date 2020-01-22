@@ -86,8 +86,10 @@ class Node:
             element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
             return cls(self._nats, join_path(self.path, *parts), element_def)
 
-    async def get_attribute(self, *parts: str) -> proxies.AttributeProxy:
+    async def get_attribute(self, *parts: str) -> proxies.AttributeProxy or proxies.WildcardAttrProxy:
         """ Retrieve an attribute proxy. """
+        if "*" in list(parts):
+            return proxies.WildcardAttrProxy(self._nats, join_path(self.path, *parts))
         return await self._get_element(*parts, cls=proxies.AttributeProxy)
 
     async def get_method(self, *parts: str) -> proxies.MethodProxy:
