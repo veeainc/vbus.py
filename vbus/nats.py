@@ -102,7 +102,7 @@ class ExtendedNatsClient:
             ip = self._remote_hostname
             try:
                 socket.inet_aton(self._remote_hostname)
-            except socket.error:
+            except:
                 ip = socket.gethostbyname(f"{self._remote_hostname}.local")
 
             return f"nats://{ip}:21400"
