@@ -103,8 +103,10 @@ class ExtendedNatsClient:
             try:
                 socket.inet_aton(self._remote_hostname)
             except:
-                ip = socket.gethostbyname(f"{self._remote_hostname}.local")
-
+                try:
+                    ip = socket.gethostbyname(f"{self._remote_hostname}.local")
+                except:
+                    return None  # cannot resolve
             return f"nats://{ip}:21400"
 
         # find Vbus server - strategy 1: get url from config file
