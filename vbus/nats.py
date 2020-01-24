@@ -1,6 +1,8 @@
 import re
 import os
 import json
+import socket
+
 import bcrypt
 import logging
 import asyncio
@@ -17,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, loop=None, remote_host: str = None, nats_url: str = None):
+    def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None):
         """
         Create an extended nats client.
         :param app_domain:  for now: system
@@ -26,24 +28,19 @@ class ExtendedNatsClient:
         :param loop: asyncio loop
         """
         self._loop = loop or asyncio.get_event_loop()
-        self._nats_url = nats_url
         self._hostname: str = get_hostname()
-        self._remote_host: str = remote_host or self._hostname
+        self._remote_hostname = hub_id or self._hostname
         self._id = f"{app_domain}.{app_id}"
         self._env = self._read_env_vars()
         self._root_folder = self._env[VBUS_PATH]
         if not self._root_folder:
-            self._root_folder = self._env['HOME']
-            self._root_folder = self._root_folder + "/vbus/"
+            self._root_folder = self._env['HOME'] + "/vbus/"
         self._nats = Client()
 
     @property
     def hostname(self) -> str:
+        """ Get client hostname (where this program is running). """
         return self._hostname
-
-    @property
-    def remote_hostname(self) -> str:
-        return self._remote_host
 
     @property
     def id(self) -> str:
@@ -79,7 +76,7 @@ class ExtendedNatsClient:
         config = self._read_or_create_config_file()
         config["auth"]["permissions"]["subscribe"].append(permission)
         config["auth"]["permissions"]["publish"].append(permission)
-        path = f"system.authorization.{self._remote_host}.{self._id}.{self._hostname}.permissions.set"
+        path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
 
         resp = await self.async_request(path, config["auth"]["permissions"], timeout=10, with_id=False, with_host=False)
         self._save_config_file(config)
@@ -94,15 +91,21 @@ class ExtendedNatsClient:
                            user="anonymous", password="anonymous",
                            connect_timeout=1, max_reconnect_attempts=2)
         data = json.dumps(config["auth"]).encode('utf-8')
-        await nats.publish("system.authorization." + self._remote_host + ".add", data)
+        await nats.publish("system.authorization." + self._remote_hostname + ".add", data)
         await nats.flush()
         await nats.close()
         await asyncio.sleep(2)  # wait server restart
 
     async def _find_vbus_url(self, config):
         # find Vbus server - strategy 0: get from argument
-        def get_from_argument() -> str:
-            return self._nats_url
+        def get_from_hub_id() -> str:
+            ip = self._remote_hostname
+            try:
+                socket.inet_aton(self._remote_hostname)
+            except socket.error:
+                ip = socket.gethostbyname(f"{self._remote_hostname}.local")
+
+            return f"nats://{ip}:21400"
 
         # find Vbus server - strategy 1: get url from config file
         def get_from_config_file() -> str:
@@ -122,7 +125,7 @@ class ExtendedNatsClient:
             return zeroconf_search()
 
         find_server_url_strategies = [
-            get_from_argument,
+            get_from_hub_id,
             get_from_config_file,
             get_from_env,
             get_default,
