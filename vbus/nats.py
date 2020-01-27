@@ -59,7 +59,7 @@ class ExtendedNatsClient:
         }
 
     async def async_connect(self):
-        config = self._read_or_create_config_file()
+        config = self._read_or_get_default_config()
         server_url = await self._find_vbus_url(config)
 
         # update the config file with the new url
@@ -73,7 +73,7 @@ class ExtendedNatsClient:
                                  name=config["auth"]["user"], closed_cb=self._async_nats_closed)
 
     async def ask_permission(self, permission) -> bool:
-        config = self._read_or_create_config_file()
+        config = self._read_or_get_default_config()
         config["auth"]["permissions"]["subscribe"].append(permission)
         config["auth"]["permissions"]["publish"].append(permission)
         path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
@@ -163,7 +163,7 @@ class ExtendedNatsClient:
         else:
             return True
 
-    def _read_or_create_config_file(self) -> Dict:
+    def _read_or_get_default_config(self) -> Dict:
         from .helpers import generate_password
 
         if not os.access(self._root_folder, os.F_OK):
