@@ -17,7 +17,7 @@ setup(
     author='Michael Mardinian',
     author_email='mmardinian@veea.com',
     license='To Be Define',
-    packages=['vbus'],
+    packages=['vbus', 'vbus.tests'],
     install_requires=[
         'zeroconf',
         'bcrypt',
@@ -25,5 +25,5 @@ setup(
         'jsonschema',
         'asyncio-nats-client',
         'genson'
-    ],
+    ]
 )

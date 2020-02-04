@@ -1,0 +1,10 @@
+{
+  "description": "test the ask permission command",
+  "steps": [
+    {
+      "action": "expect",
+      "what": "[PUB system.authorization.{host}.{remote_app}.{host}.permissions.set {str:inbox_1} {int}]",
+      "timeout": 8000
+    }
+  ]
+}
