@@ -7,6 +7,7 @@ from typing import Callable, Dict, Iterator
 from .helpers import join_path, get_path_in_dict
 from .nats import ExtendedNatsClient
 from .definitions import Definition
+from .nodes import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
 
 
 class Proxy:
@@ -65,7 +66,7 @@ class AttributeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 
@@ -148,7 +149,8 @@ class NodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_add(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "add"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts,
+                                                         NOTIF_ADDED), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_del(self, *parts: str, on_del: Callable):
@@ -156,7 +158,7 @@ class NodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_del(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "del"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 
@@ -170,7 +172,7 @@ class WildcardNodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "set"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_SETTED), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_add(self, *parts: str, on_add: Callable):
@@ -178,7 +180,7 @@ class WildcardNodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_add(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "add"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_ADDED), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_del(self, *parts: str, on_del: Callable):
@@ -186,7 +188,7 @@ class WildcardNodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_del(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "del"), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 
@@ -200,7 +202,7 @@ class WildcardAttrProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "value", "set"),
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "value", NOTIF_SETTED),
                                                cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
@@ -226,5 +228,5 @@ class MethodProxy(Proxy):
                                               timeout=timeout_sec)
 
     async def subscribe_set(self, on_set: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, "set"), cb=on_set, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=on_set, with_id=False, with_host=False)
         self._sids.append(sis)

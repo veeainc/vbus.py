@@ -12,6 +12,11 @@ from typing import Callable, Dict, List, Awaitable
 
 LOGGER = logging.getLogger(__name__)
 
+RawNode = Dict
+
+SetCallback = Callable[[any, *str], Awaitable[any]]
+GetCallback = Callable[[any, *str], Awaitable[any]]
+
 
 class Definition(ABC):
     """ Base class for creating an element definition. """
@@ -33,26 +38,26 @@ class Definition(ABC):
 
     async def handle_get(self, data: any, parts: List[str]):
         """ Tells how to handle a set request from Vbus. """
-        return await self.to_json()
+        return await self.to_repr()
 
     @abstractmethod
-    async def to_json(self) -> any:
+    async def to_repr(self) -> any:
         """ Get the Json representation (as a Python Object)."""
         pass
 
     @staticmethod
     def is_attribute(node: any) -> bool:
-        """ Tells if a node is an attribute. """
+        """ Tells if a raw node is an attribute. """
         return isinstance(node, dict) and "schema" in node
 
     @staticmethod
     def is_method(node: any) -> bool:
-        """ Tells if a node is an attribute. """
+        """ Tells if a raw node is an attribute. """
         return isinstance(node, dict) and "params" in node and "returns" in node
 
     @staticmethod
     def is_node(node: any) -> bool:
-        """ Tells if a node is an attribute. """
+        """ Tells if a raw node is a node. """
         return not Definition.is_attribute(node) and not Definition.is_method(node)
 
 
@@ -65,7 +70,7 @@ class ErrorDefinition(Definition):
 
     """ Represents an error. """
 
-    async def to_json(self) -> any:
+    async def to_repr(self) -> any:
         """ Get the Json representation (as a Python Object)."""
         if self._detail:
             return {
@@ -154,7 +159,7 @@ class MethodDef(Definition):
 
         return params_schema, return_schema
 
-    async def to_json(self) -> any:
+    async def to_repr(self) -> any:
         return {
             "params": {
                 "schema": self._params_schema
@@ -169,8 +174,8 @@ class AttributeDef(Definition):
     def __init__(self, uuid: str,
                  value: any = None,
                  schema: dict = None,
-                 on_set: Callable = None,
-                 on_get: Callable = None):
+                 on_set: SetCallback = None,
+                 on_get: GetCallback = None):
         super().__init__()
 
         if value is None and schema is None:
@@ -186,6 +191,14 @@ class AttributeDef(Definition):
         else:
             self._schema = schema
 
+    @property
+    def value(self) -> any:
+        return self._value
+
+    @value.setter
+    def value(self, value: any):
+        self._value = value
+
     def to_schema(self, value: any) -> any:
         # we use genson library to determine schema type:
         try:
@@ -197,7 +210,7 @@ class AttributeDef(Definition):
         except genson.schema.node.SchemaGenerationError as e:
             raise TypeError(f"Invalid attribute type for {self._key}, type is {type(self._value)} ({str(e)})")
 
-    async def to_json(self) -> any:
+    async def to_repr(self) -> any:
         if self._value is None:
             return {
                 "schema": self._schema
@@ -226,7 +239,7 @@ class AttributeDef(Definition):
                 else:
                     return self._value
         else:
-            return await self.to_json()
+            return await self.to_repr()
 
     async def search_path(self, parts: List[str]) -> 'Definition' or None:
         """ Search for a path in this definition.
@@ -244,7 +257,7 @@ class NodeDef(Definition):
         It holds a user structure (Python object) and optional callbacks.
     """
 
-    def __init__(self, node_def: Dict, on_set: Callable = None, ):
+    def __init__(self, node_def: Dict, on_set: SetCallback = None, ):
         super().__init__()
         self._initialize_structure(node_def)
         self._structure = node_def
@@ -284,8 +297,8 @@ class NodeDef(Definition):
             return await self._structure[parts[0]].search_path(parts[1:])
         return None
 
-    async def to_json(self) -> any:
-        return {k: await v.to_json() for k, v in self._structure.items()}
+    async def to_repr(self) -> any:
+        return {k: await v.to_repr() for k, v in self._structure.items()}
 
 
 AsyncNodeDefCallable = Callable[[], Awaitable[Dict or Definition]]
@@ -310,9 +323,9 @@ class AsyncNodeDef(Definition):
         node = await self._get_node()
         return await node.search_path(parts)
 
-    async def to_json(self) -> any:
+    async def to_repr(self) -> any:
         node = await self._get_node()
-        return await node.to_json()
+        return await node.to_repr()
 
 
 # some aliases

@@ -173,20 +173,15 @@ class ExtendedNatsClient:
         config_file = os.path.join(self._root_folder, self._id + ".conf")
         if os.path.isfile(config_file):
             LOGGER.debug("load existing configuration file for " + self._id)
-            return json.loads(open(config_file).read())
+            with open(config_file, 'r') as content_file:
+                content = content_file.read()
+                return json.loads(content)
         else:
             LOGGER.debug("create new configuration file for " + self._id)
             # TODO: this template should be in a git repo shared between all vbus impl
             password = generate_password()
             public_key = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=11, prefix=b"2a"))
             return {
-                "elements": {
-                    "path": self._id,
-                    "name": self._id,
-                    "host": self._hostname,
-                    "uuid": f"{self._id}.{self._hostname}",
-                    "bridge": "None",
-                },
                 "auth": {
                     "user": f"{self._id}.{self._hostname}",
                     "password": public_key.decode('utf-8'),
