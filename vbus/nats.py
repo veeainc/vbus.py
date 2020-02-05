@@ -94,7 +94,6 @@ class ExtendedNatsClient:
         await nats.publish("system.authorization." + self._remote_hostname + ".add", data)
         await nats.flush()
         await nats.close()
-        await asyncio.sleep(2)  # wait server restart
 
     async def _find_vbus_url(self, config):
         # find Vbus server - strategy 0: get from argument
@@ -187,16 +186,12 @@ class ExtendedNatsClient:
                     "password": public_key.decode('utf-8'),
                     "permissions": {
                         "subscribe": [
-                            ">",
                             f"{self._id}",
                             f"{self._id}.>",
-                            f"{self._hostname}.{self._id}.>",
                         ],
                         "publish": [
-                            ">",
                             f"{self._id}",
                             f"{self._id}.>",
-                            f"{self._hostname}.{self._id}.>",
                         ],
                     }
                 },
@@ -263,3 +258,4 @@ class ExtendedNatsClient:
     async def async_publish(self, path: str, data: any, with_id: bool = True, with_host: bool = True):
         path = self._get_path(path, with_id, with_host)
         await self._nats.publish(path, to_vbus(data))
+        await self._nats.flush()
