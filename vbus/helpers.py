@@ -7,8 +7,15 @@ import logging
 import collections
 from typing import cast, Dict
 
-
 LOGGER = logging.getLogger(__name__)
+
+# constants
+NOTIF_ADDED = "add"
+NOTIF_REMOVED = "del"
+NOTIF_GET = "get"
+NOTIF_VALUE_GET = "value.get"
+NOTIF_SETTED = "set"
+NOTIF_VALUE_SETTED = "value.set"
 
 
 def get_hostname() -> str:
@@ -74,7 +81,7 @@ def is_sequence(obj):
     return isinstance(obj, collections.Sequence)
 
 
-def generate_password(length=22, chars=string.ascii_letters+string.digits):
+def generate_password(length=22, chars=string.ascii_letters + string.digits):
     from random import choice
 
     new_pass = []

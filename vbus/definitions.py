@@ -14,8 +14,8 @@ LOGGER = logging.getLogger(__name__)
 
 RawNode = Dict
 
-SetCallback = Callable[[any, *str], Awaitable[any]]
-GetCallback = Callable[[any, *str], Awaitable[any]]
+SetCallback = Callable[[any, List[str]], Awaitable[any]]
+GetCallback = Callable[[any, List[str]], Awaitable[any]]
 
 
 class Definition(ABC):

@@ -12,18 +12,11 @@ from typing import Dict, Callable, Awaitable, List, Optional
 from vbus.definitions import Definition
 from . import definitions
 from . import proxies
-from .helpers import from_vbus, join_path, to_vbus, prune_dict
+from .helpers import from_vbus, join_path, to_vbus, prune_dict, NOTIF_ADDED, NOTIF_REMOVED, NOTIF_VALUE_SETTED, \
+    NOTIF_SETTED
 from .nats import ExtendedNatsClient
 
 LOGGER = logging.getLogger(__name__)
-
-# constants
-NOTIF_ADDED = "add"
-NOTIF_REMOVED = "del"
-NOTIF_GET = "get"
-NOTIF_VALUE_GET = "value.get"
-NOTIF_SETTED = "set"
-NOTIF_VALUE_SETTED = "value.set"
 
 
 class Element(abc.ABC):

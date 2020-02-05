@@ -7,7 +7,7 @@ from typing import Callable, Dict, Iterator
 from .helpers import join_path, get_path_in_dict
 from .nats import ExtendedNatsClient
 from .definitions import Definition
-from .nodes import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
+from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
 
 
 class Proxy:
