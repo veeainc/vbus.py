@@ -2,7 +2,7 @@ import sys
 import unittest
 import vbus
 import logging
-from vbus.tests.utils import async_test
+from vbus.tests.utils import async_test, setup_test
 import natsplayer
 
 
@@ -15,12 +15,14 @@ class TestStringMethods(unittest.TestCase):
 
     @async_test
     async def test_ask_permission(self):
-        player = natsplayer.Player("test.vbuspy")
-        player.play("./ask_permission.json")
+        player = setup_test("./scenarios/ask_permission.json")
         client = await self.new_client()
 
-        resp = await client.ask_permission("foo.bar")
+        resp = await client.ask_permission("should.be.true")
         self.assertEquals(resp, True)
+
+        resp = await client.ask_permission("should.be.false")
+        self.assertEquals(resp, False)
 
         self.assertTrue(player.is_success())
 

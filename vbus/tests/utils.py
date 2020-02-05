@@ -1,4 +1,15 @@
+import os
 import asyncio
+import natsplayer
+
+
+def setup_test(scenario: str) -> natsplayer.Player:
+    conf_file = os.path.expanduser("~/vbus/test.vbuspy.conf")
+    if os.path.exists(conf_file):
+        os.remove(conf_file)
+    player = natsplayer.Player("test.vbuspy")
+    player.play(scenario)
+    return player
 
 
 def async_test(f):
