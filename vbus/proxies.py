@@ -4,7 +4,7 @@
 """
 from typing import Callable, Dict, Iterator
 
-from .helpers import join_path, get_path_in_dict
+from .helpers import join_path, get_path_in_dict, NOTIF_GET
 from .nats import ExtendedNatsClient
 from .definitions import Definition
 from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
@@ -128,12 +128,13 @@ class NodeProxy(Proxy):
         return name in self._node_json and Definition.is_method(self._node_json[name])
 
     async def get_attribute(self, *parts: str) -> AttributeProxy:
-        attr_def = get_path_in_dict(self._node_json, *parts)
-        if not attr_def:
-            # TODO: implement fetch
-            raise NotImplementedError("Lazy loading nodes is not yet implemented, consider loading the parent first")
+        raw_elem_def = get_path_in_dict(self._node_json, *parts)
+        if raw_elem_def:
+            return AttributeProxy(self._nats, join_path(self._path, *parts), raw_elem_def)
         else:
-            return AttributeProxy(self._nats, join_path(self._path, *parts), attr_def)
+            # load from Vbus
+            resp = await self._nats.async_request(join_path(*parts, NOTIF_GET), None, with_host=False, with_id=False)
+            return AttributeProxy(self._nats, join_path(self.path, *parts), resp)
 
     async def get_node(self, *parts: str) -> 'NodeProxy' or None:
         n = get_path_in_dict(self._node_json, *parts)
