@@ -23,7 +23,7 @@ class TestStringMethods(unittest.TestCase):
         resp = await client.ask_permission("should.be.false")
         self.assertEqual(resp, False)
 
-        self.assertTrue(player.is_success())
+        self.assert_player_success(player)
 
     @async_test
     async def test_add_attribute(self):
@@ -33,7 +33,7 @@ class TestStringMethods(unittest.TestCase):
         attr = await client.add_attribute("name", "HEIMAN")
         self.assertIsNotNone(attr)
 
-        self.assertTrue(player.is_success())
+        self.assert_player_success(player)
 
     @async_test
     async def test_set_attribute(self):
@@ -44,7 +44,7 @@ class TestStringMethods(unittest.TestCase):
         self.assertIsNotNone(attr)
         await attr.set_value("hello world")
 
-        self.assertTrue(player.is_success())
+        self.assert_player_success(player)
 
     @async_test
     async def test_get_remote_attribute(self):
@@ -56,7 +56,7 @@ class TestStringMethods(unittest.TestCase):
         val = await remote_attr.get_value()
         self.assertEqual("HEIMAN", val)
 
-        self.assertTrue(player.is_success())
+        self.assert_player_success(player)
 
     @staticmethod
     @retry(Exception, tries=4)
@@ -64,6 +64,11 @@ class TestStringMethods(unittest.TestCase):
         client = vbus.Client("test", "vbuspy")
         await client.connect()
         return client
+
+    def assert_player_success(self, p):
+        p.wait_done()
+        self.assertTrue(p.is_success())
+        p.stop()
 
 
 if __name__ == '__main__':
