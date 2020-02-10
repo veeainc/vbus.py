@@ -5,6 +5,8 @@ from functools import wraps
 
 import natsplayer
 
+__filepath__ = os.path.dirname(os.path.abspath(__file__))
+
 
 def setup_test(scenario: str) -> natsplayer.Player:
     conf_file = os.path.expanduser("~/vbus/test.vbuspy.conf")
@@ -12,7 +14,7 @@ def setup_test(scenario: str) -> natsplayer.Player:
         os.remove(conf_file)
 
     player = natsplayer.Player("test.vbuspy")
-    player.play(scenario)
+    player.play(os.path.join(__filepath__, scenario))
     return player
 
 

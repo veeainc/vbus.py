@@ -1,0 +1,1 @@
+git+ssh://git@bitbucket.org/vbus/nats-scenario-player@7e3cd70e80c0355cf59a0fbbe6528bdb86918e78#egg=natsplayer

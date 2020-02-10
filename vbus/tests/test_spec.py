@@ -58,6 +58,19 @@ class TestStringMethods(unittest.TestCase):
 
         self.assert_player_success(player)
 
+    @async_test
+    async def test_add_method(self):
+        player = setup_test("./scenarios/add_method_python.json")
+        client = await self.new_client()
+
+        async def echo(msg: str, **kwargs) -> str:
+            return msg
+
+        meth = await client.add_method("echo", echo)
+        self.assertIsNotNone(meth)
+
+        self.assert_player_success(player)
+
     @staticmethod
     @retry(Exception, tries=4)
     async def new_client():
