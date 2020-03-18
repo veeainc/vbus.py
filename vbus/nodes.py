@@ -13,7 +13,7 @@ from vbus.definitions import Definition
 from . import definitions
 from . import proxies
 from .helpers import from_vbus, join_path, to_vbus, prune_dict, NOTIF_ADDED, NOTIF_REMOVED, NOTIF_VALUE_SETTED, \
-    NOTIF_SETTED
+    NOTIF_SETTED, NOTIF_GET
 from .nats import ExtendedNatsClient
 
 LOGGER = logging.getLogger(__name__)
@@ -205,7 +205,7 @@ class NodeManager(Node):
             return
 
         method = parts.pop()
-        if method == NOTIF_SETTED:
+        if method == NOTIF_GET:
             return await self._handle_get(parts, data)
         elif method == NOTIF_SETTED:
             return await self._handle_set(parts, data)
