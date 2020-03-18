@@ -70,6 +70,10 @@ def get_path_in_dict(d: Dict, *parts: str):
     return root
 
 
+def is_wildcard_path(*parts: str) -> bool:
+    return '*' in parts
+
+
 def join_path(*args: str) -> str:
     """ Join a path and skip ampty strings. """
     return '.'.join(filter(None, args))

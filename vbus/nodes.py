@@ -109,56 +109,6 @@ class Node(Element):
         await self._client.async_publish(join_path(self.path, NOTIF_REMOVED), data)
 
 
-'''
-    async def _get_element(self, *parts: str, cls):
-        """ Try to retrieve a proxy on a remote element.
-        :param parts: splited VBus path
-        :param cls: Element class type
-        :return: The instance
-        """
-        element_def = await self._definition.search_path(list(parts))
-        if element_def:
-            return cls(self._nats, join_path(self.path, *parts), element_def)
-        else:
-            # try to load from Vbus
-            element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
-            return cls(self._nats, join_path(self.path, *parts), element_def)
-
-
-
-    async def get_method(self, *parts: str) -> proxies.MethodProxy:
-        """ Retrieve a method proxy. """
-        return await self._get_element(*parts, cls=proxies.MethodProxy)
-
-    async def get_node(self, *parts: str) -> proxies.NodeProxy or proxies.WildcardNodeProxy:
-        """ Retrieve a node proxy. """
-        if "*" in list(parts):
-            return proxies.WildcardNodeProxy(self._nats, join_path(self.path, *parts))
-        return await self._get_element(*parts, cls=proxies.NodeProxy)
-
-    async def add_method(self, uuid: str, method: Callable) -> 'Node':
-        """ Register a new callback as a method.
-            The callback must be annotated with Python type.
-            See: https://docs.python.org/3/library/typing.html
-
-            :example:
-            def scan(self, time: int) -> None:
-                pass
-        """
-        assert isinstance(self._definition, definitions.NodeDef)
-        method_def = definitions.MethodDef(method)
-        self._definition.add_child(uuid, method_def)
-        node = Node(self._nats, uuid, method_def, self)
-
-        data = {uuid: await method_def.to_repr()}
-        await self._nats.async_publish(join_path(self.path, "add"), data)
-        return node
-
-    async def set(self, path: str, value: any):
-        await self._nats.async_publish(join_path(self.path, path, "set"), value)
-'''
-
-
 class Attribute(Element):
     """ A VBus connected attribute. """
 

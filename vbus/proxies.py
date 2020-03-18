@@ -4,7 +4,7 @@
 """
 from typing import Callable, Dict, Iterator
 
-from .helpers import join_path, get_path_in_dict, NOTIF_GET
+from .helpers import join_path, get_path_in_dict, NOTIF_GET, is_wildcard_path
 from .nats import ExtendedNatsClient
 from .definitions import Definition
 from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
@@ -131,16 +131,20 @@ class NodeProxy(Proxy):
         raw_elem_def = get_path_in_dict(self._node_json, *parts)
         if raw_elem_def:
             return AttributeProxy(self._nats, join_path(self._path, *parts), raw_elem_def)
-        else:
-            # load from Vbus
-            resp = await self._nats.async_request(join_path(*parts, NOTIF_GET), None, with_host=False, with_id=False)
-            return AttributeProxy(self._nats, join_path(self.path, *parts), resp)
+        # load from Vbus
+        resp = await self._nats.async_request(join_path(*parts, NOTIF_GET), None, with_host=False, with_id=False)
+        return AttributeProxy(self._nats, join_path(self.path, *parts), resp)
 
     async def get_node(self, *parts: str) -> 'NodeProxy' or None:
+        if is_wildcard_path(*parts):
+            raise ValueError("wildcard path not supported")
+
         n = get_path_in_dict(self._node_json, *parts)
         if n:
             return NodeProxy(self._nats, join_path(self._path, *parts), n)
-        return None
+        # try to load from Vbus
+        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
+        return NodeProxy(self._nats, join_path(self.path, *parts), element_def)
 
     def __getitem__(self, item):
         return self._node_json[item]
