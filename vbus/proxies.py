@@ -84,11 +84,15 @@ class NodeProxy(Proxy):
         return str(self.tree)
 
     async def get_method(self, *parts: str) -> 'MethodProxy' or None:
+        if is_wildcard_path(*parts):
+            raise ValueError("wildcard path not supported")
+
         node_json = get_path_in_dict(self._node_json, *parts)
         if node_json:
             return MethodProxy(self._nats, self._path + "." + ".".join(parts), node_json)
-        else:
-            return None
+        # try to load from Vbus
+        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
+        return MethodProxy(self._nats, join_path(self.path, *parts), element_def)
 
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
