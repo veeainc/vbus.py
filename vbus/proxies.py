@@ -2,6 +2,7 @@
     Proxies are object used to communicate with a remote VBus element.
     For example, reading a remote attribute, calling a remote method.
 """
+import logging
 from typing import Callable, Dict, Iterator
 
 from .helpers import join_path, get_path_in_dict, NOTIF_GET, is_wildcard_path
@@ -9,9 +10,12 @@ from .nats import ExtendedNatsClient
 from .definitions import Definition
 from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
 
+LOGGER = logging.getLogger(__name__)
+
 
 class Proxy:
     """ Base class for proxy object. """
+
     def __init__(self, nats: ExtendedNatsClient, path: str):
         self._nats = nats
         self._path = path
@@ -32,8 +36,33 @@ class Proxy:
             await self._nats.nats.unsubscribe(sid)
 
 
+class UnknownProxy(Proxy):
+    def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
+        super().__init__(nats, path)
+        self._raw_node = attr_def
+
+    def is_attribute(self) -> bool:
+        return Definition.is_attribute(self._raw_node)
+
+    def as_attribute(self) -> 'AttributeProxy':
+        return AttributeProxy(self._nats, self._path, self._raw_node)
+
+    def is_method(self) -> bool:
+        return Definition.is_method(self._raw_node)
+
+    def as_method(self) -> 'MethodProxy':
+        return MethodProxy(self._nats, self._path, self._raw_node)
+
+    def is_node(self) -> bool:
+        return Definition.is_node(self._raw_node)
+
+    def as_node(self) -> 'NodeProxy':
+        return NodeProxy(self._nats, self._path, self._raw_node)
+
+
 class AttributeProxy(Proxy):
     """ Represents remote attributes actions. """
+
     def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
         super().__init__(nats, path)
         self._attr_def = attr_def
@@ -59,19 +88,22 @@ class AttributeProxy(Proxy):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
     async def get_value(self, in_cache=False, timeout=1):
-        return await self._nats.async_request(self._path + ".value.get", {"in_cache": in_cache}, with_host=False, with_id=False, timeout=timeout)
+        return await self._nats.async_request(self._path + ".value.get", {"in_cache": in_cache}, with_host=False,
+                                              with_id=False, timeout=timeout)
 
     async def subscribe_set(self, on_set: Callable):
         async def wrap_raw_node(raw_node):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=wrap_raw_node, with_id=False,
+                                               with_host=False)
         self._sids.append(sis)
 
 
 class NodeProxy(Proxy):
     """ Represents remote node actions. """
+
     def __init__(self, nats: ExtendedNatsClient, path: str, node_json: Dict):
         super().__init__(nats, path)
         self._node_json = node_json
@@ -97,9 +129,12 @@ class NodeProxy(Proxy):
     async def set(self, value: any):
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
-    def items(self):
+    def items(self) -> Iterator[UnknownProxy]:
         for k, v in self._node_json.items():
-            yield k, NodeProxy(self._nats, join_path(self._path, k), v)
+            if isinstance(v, dict):
+                yield k, UnknownProxy(self._nats, join_path(self._path, k), v)
+            else:
+                LOGGER.warning("skipping unknown object: %s", v)
 
     def attributes(self) -> Iterator[AttributeProxy]:
         """ Yield only attributes. """
@@ -167,12 +202,14 @@ class NodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_del(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node,
+                                               with_id=False, with_host=False)
         self._sids.append(sis)
 
 
 class WildcardNodeProxy(Proxy):
     """ Represents remote node actions on wildcard path ('*'). """
+
     def __init__(self, nats: ExtendedNatsClient, path: str):
         super().__init__(nats, path)
 
@@ -181,7 +218,8 @@ class WildcardNodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_SETTED), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_SETTED), cb=wrap_raw_node,
+                                               with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_add(self, *parts: str, on_add: Callable):
@@ -189,7 +227,8 @@ class WildcardNodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_add(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_ADDED), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_ADDED), cb=wrap_raw_node,
+                                               with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_del(self, *parts: str, on_del: Callable):
@@ -197,12 +236,14 @@ class WildcardNodeProxy(Proxy):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_del(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node,
+                                               with_id=False, with_host=False)
         self._sids.append(sis)
 
 
 class WildcardAttrProxy(Proxy):
     """ Represents remote attribute actions on wildcard path ('*'). """
+
     def __init__(self, nats: ExtendedNatsClient, path: str):
         super().__init__(nats, path)
 
@@ -218,6 +259,7 @@ class WildcardAttrProxy(Proxy):
 
 class MethodProxy(Proxy):
     """ Represents remote method actions. """
+
     def __init__(self, nats: ExtendedNatsClient, path: str, node_def: Dict):
         super().__init__(nats, path)
         self._node_def = node_def
@@ -230,12 +272,13 @@ class MethodProxy(Proxy):
     def returns_schema(self):
         return self._node_def["returns"]["schema"]
 
-    async def call(self, *args: any, timeout_sec: float = 0.5,  with_host=False, with_id=False,):
+    async def call(self, *args: any, timeout_sec: float = 0.5, with_host=False, with_id=False, ):
         return await self._nats.async_request(self._path + ".set", tuple(args),
                                               with_host=with_host,
                                               with_id=with_id,
                                               timeout=timeout_sec)
 
     async def subscribe_set(self, on_set: Callable):
-        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=on_set, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=on_set, with_id=False,
+                                               with_host=False)
         self._sids.append(sis)

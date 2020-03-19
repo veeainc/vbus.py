@@ -143,7 +143,7 @@ class NodeManager(Node):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
 
-    async def discover(self, domain: str, app_id: str, timeout: int = 1, level: int = None) -> proxies.NodeProxy:
+    async def discover(self, domain: str, app_id: str, timeout: int = 1, level: int = None) -> proxies.UnknownProxy:
         json_node = {}
 
         async def async_on_discover(msg):
@@ -162,7 +162,7 @@ class NodeManager(Node):
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
         # node_builder = builder.Node(json_node)
-        return proxies.NodeProxy(self._nats, f"{domain}.{app_id}", json_node)
+        return proxies.UnknownProxy(self._nats, f"{domain}.{app_id}", json_node)
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
