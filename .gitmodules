@@ -1,3 +1,0 @@
-[submodule "vbus/tests/scenarios"]
-	path = vbus/tests/scenarios
-	url = git@bitbucket.org:vbus/scenarios.git
