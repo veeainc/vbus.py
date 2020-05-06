@@ -3,7 +3,7 @@
     For example, reading a remote attribute, calling a remote method.
 """
 import logging
-from typing import Callable, Dict, Iterator
+from typing import Callable, Dict, Iterator, Optional, Awaitable
 
 from .helpers import join_path, get_path_in_dict, NOTIF_GET, is_wildcard_path
 from .nats import ExtendedNatsClient
@@ -14,7 +14,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Proxy:
-    """ Base class for proxy object. """
+    """ Base class for proxy object.
+        Proxies are object used to access remote elements.
+    """
 
     def __init__(self, nats: ExtendedNatsClient, path: str):
         self._nats = nats
@@ -23,11 +25,19 @@ class Proxy:
         self._name = path.split('.')[-1]
 
     @property
-    def path(self):
+    def path(self) -> str:
+        """ Retrieve element path in the Vbus tree.
+
+            :getter: Returns the path.
+        """
         return self._path
 
     @property
     def name(self) -> str:
+        """ Retrieve element name (the last part of the path).
+
+            :getter: Returns element name.
+        """
         return self._name
 
     async def unsubscribe(self):
@@ -37,27 +47,51 @@ class Proxy:
 
 
 class UnknownProxy(Proxy):
+    """ Represents an unknown remote element.
+        It can be a node, an attribute or a method.
+    """
     def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
         super().__init__(nats, path)
         self._raw_node = attr_def
 
     def is_attribute(self) -> bool:
+        """ Test if it's an attribute element. If yes use :func:`as_attribute`.
+
+            >>> if remote_element.is_attribute():
+            >>>     remote_attr = remote_element.as_attribute()
+        """
         return Definition.is_attribute(self._raw_node)
 
     def as_attribute(self) -> 'AttributeProxy':
+        """ Retrieve an attribute proxy."""
         return AttributeProxy(self._nats, self._path, self._raw_node)
 
     def is_method(self) -> bool:
+        """ Test if it's a method element. If yes use :func:`as_method`.
+
+            >>> if remote_element.is_method():
+            >>>     remote_method = remote_element.as_method()
+        """
         return Definition.is_method(self._raw_node)
 
     def as_method(self) -> 'MethodProxy':
+        """ Retrieve a method proxy."""
         return MethodProxy(self._nats, self._path, self._raw_node)
 
     def is_node(self) -> bool:
+        """ Test if it's a node. If yes use :func:`as_node`.
+
+            >>> if remote_element.is_node():
+            >>>     remote_node = remote_element.as_node()
+        """
         return Definition.is_node(self._raw_node)
 
     def as_node(self) -> 'NodeProxy':
+        """ Retrieve a node proxy."""
         return NodeProxy(self._nats, self._path, self._raw_node)
+
+
+AttrSubscribeSetCallable = Callable[['NodeProxy'], Awaitable[None]]
 
 
 class AttributeProxy(Proxy):
@@ -71,27 +105,53 @@ class AttributeProxy(Proxy):
         return f"{self._name} = {self.value} ({self.schema})"
 
     @property
-    def has_value(self):
+    def has_value(self) -> bool:
+        """ Check if this attribute has a value in cache (the value in the tree).
+
+            :getter: Returns True if a value is in cache.
+        """
         return "value" in self._attr_def
 
     @property
-    def value(self):
+    def value(self) -> Optional[any]:
+        """ Retrieve value in cache.
+
+            :getter: Returns value in cache or None.
+        """
         if "value" in self._attr_def:
             return self._attr_def["value"]
 
     @property
-    def schema(self):
+    def schema(self) -> Dict:
+        """ Retrieve attribute Json-Schema.
+
+            :getter: Returns the Jso-schema or None.
+        """
         if "schema" in self._attr_def:
             return self._attr_def["schema"]
 
     async def set(self, value: any):
+        """ Set attribute value.
+
+            :param value: The value (must match the Json-schema)
+        """
         return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
 
     async def get_value(self, in_cache=False, timeout=1):
+        """ A synchronous read operation. It ask to the remote app to read a new value for this attribute.
+            (for example, if it's a device, to read this value directly in the device)
+
+            :param in_cache: no yet supported
+            :param timeout: The timeout in sec
+        """
         return await self._nats.async_request(self._path + ".value.get", {"in_cache": in_cache}, with_host=False,
                                               with_id=False, timeout=timeout)
 
-    async def subscribe_set(self, on_set: Callable):
+    async def subscribe_set(self, on_set: AttrSubscribeSetCallable):
+        """ Subscribe to 'set' notifications. It is fired when someone set a new value for this attribute.
+
+            :param on_set: The callback, example: async def on_set(node: NodeProxy)
+        """
         async def wrap_raw_node(raw_node):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node)
@@ -265,14 +325,47 @@ class MethodProxy(Proxy):
         self._node_def = node_def
 
     @property
-    def params_schema(self):
+    def params_schema(self) -> Dict:
+        """ Retrieve params Json-schema.
+            It describes required params.
+
+            :getter: Returns the Json-schema.
+        """
         return self._node_def["params"]["schema"]
 
     @property
-    def returns_schema(self):
+    def returns_schema(self) -> Dict:
+        """ Retrieve returns Json-schema.
+            It describes the return value.
+
+            :getter: Returns the Json-schema.
+        """
         return self._node_def["returns"]["schema"]
 
     async def call(self, *args: any, timeout_sec: float = 0.5, with_host=False, with_id=False, ):
+        """ Make a remote procedure call.
+
+            >>> method_proxy.params_schema
+            >>> {
+            >>>   "type": "array",
+            >>>   "items": [
+            >>>     {
+            >>>       "type": "string",
+            >>>       "description": "id"
+            >>>     },
+            >>>     {
+            >>>       "type": "number",
+            >>>       "description": "endpoint"
+            >>>     },
+            >>>   ]
+            >>> }
+
+            >>> #                              id ¬      ┌ endpoint
+            >>> resp = await method_proxy.call("e4fa56", 0, timeout_sec=1)
+
+            :param args: The required params as described by the Json-schema
+            :param timeout_sec: The timeout in sec
+        """
         return await self._nats.async_request(self._path + ".set", tuple(args),
                                               with_host=with_host,
                                               with_id=with_id,

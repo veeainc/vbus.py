@@ -1,4 +1,5 @@
 TEST_PATH=./vbus/tests
+DOC_PATH=./docs
 SCENARIO_REPO=./vbus/tests/scenarios
 
 clean-pyc:
@@ -11,3 +12,10 @@ test-init:
 
 test: clean-pyc
 	python -m unittest discover $(TEST_PATH)
+
+
+install-doc-requirements:
+	pip install -r docs/requirements.txt
+
+doc: install-doc-requirements
+	( cd $(DOC_PATH) ; make html )

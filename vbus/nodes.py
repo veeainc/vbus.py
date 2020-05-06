@@ -55,6 +55,24 @@ class Node(Element):
         self._definition = definition
 
     async def add_node(self, uuid: str, raw_node: definitions.RawNode, on_set: Callable = None) -> 'Node':
+        """ Add a new node in this tree.
+
+            >>> node = await client.add_node("00:45:25:65:25:ff", {
+            >>>     'name': definitions.A("name", None),    # add an attribute
+            >>>     'scan': definitions.MethodDef(on_scan), # add a method
+            >>>     }
+            >>> })
+
+            The 'raw_node' param contains a node definition in a Python dictionary style. For this you can use node
+            definition contained in `vbus.definition` with these alias:
+                N = NodeDef
+                A = AttributeDef
+                M = MethodDef
+
+            :param uuid: Node uuid
+            :param raw_node: Raw node definition
+            :param on_set: A callback called when setted
+        """
         definition = definitions.NodeDef(raw_node, on_set=on_set)  # create the definition
         node = Node(self._client, uuid, definition, self)  # create the connected node
         self._definition.add_child(uuid, definition)  # add it
@@ -66,6 +84,13 @@ class Node(Element):
 
     async def add_attribute(self, uuid: str, value: any, on_set: definitions.SetCallback = None,
                             on_get: definitions.GetCallback = None) -> 'Attribute':
+        """ Add a new attribute in this tree. Prefer the use of add_node() with nested attributes directly.
+
+            >>> attr = await client.add_attribute("name", "Phillips")
+
+            :param uuid: Attribute uuid
+            :param value: Attribute initial value
+        """
         definition = definitions.AttributeDef(uuid, value, on_set=on_set, on_get=on_get)  # create the definition
         node = Attribute(self._client, uuid, definition, self)  # create the connected node
         self._definition.add_child(uuid, definition)  # add it
@@ -76,6 +101,17 @@ class Node(Element):
         return node
 
     async def add_method(self, uuid: str, method: Callable) -> 'Method':
+        """ Add a new method in this tree.
+
+            >>> async def scan(time: int = 180, **kwargs) -> None:
+            >>>     # kwargs will receive the Vbus path
+            >>>     pass  # some work
+            >>>
+            >>> attr = await client.add_method("scan", scan)
+
+            :param uuid: Method uuid
+            :param method: Method callable
+        """
         definition = definitions.MethodDef(method)  # create the definition
         node = Method(self._client, uuid, definition, self)  # create the connected node
         self._definition.add_child(uuid, definition)  # add it
@@ -132,8 +168,11 @@ class Method(Element):
 
 class NodeManager(Node):
     """ This is the VBus nodes manager.
-        It manage node lifecycle.
-        """
+        It manage local nodes lifecycle and allow to retrieve remote nodes.
+        The node manager is also the root node of your app.
+
+        Note: The client inherits from the NodeManager
+    """
 
     def __init__(self, nats: ExtendedNatsClient):
         super().__init__(nats, "", definitions.NodeDef({}))
@@ -143,7 +182,31 @@ class NodeManager(Node):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
 
-    async def discover(self, domain: str, app_id: str, timeout: int = 1, level: int = None) -> proxies.UnknownProxy:
+    async def discover(self, domain: str, app_name: str, timeout: int = 1, level: int = None) -> proxies.UnknownProxy:
+        """ Discover a remote bus tree (A Vbus tree is composed of Vbus elements).
+
+            >>> async def traverse_node(node: NodeProxy, level: int):
+            >>>     for name, elem in node.items():
+            >>>         if elem.is_node():
+            >>>             n = elem.as_node()
+            >>>             print('node: ', name)
+            >>>             await traverse_node(n, level + 1)
+            >>>         elif elem.is_attribute():
+            >>>             attr = elem.as_attribute()
+            >>>             print('attribute: ', name)
+            >>>         elif elem.is_method():
+            >>>             print('method: ', name)
+            >>>
+            >>> element = await client.discover("system", "zigbee")
+            >>> if element.is_node():
+            >>>     await traverse_node(element.as_node(), 0)
+
+            :param domain: Remote app domain
+            :param app_name: Remote app name
+            :param timeout: Timeout in sec
+            :param level: (not yet supported)
+            :return: An unknown proxy
+        """
         json_node = {}
 
         async def async_on_discover(msg):
@@ -155,14 +218,14 @@ class NodeManager(Node):
         if level:
             filters["max_level"] = level
 
-        sid = await self._nats.nats.request(f"{domain}.{app_id}",
+        sid = await self._nats.nats.request(f"{domain}.{app_name}",
                                             to_vbus(filters),
                                             expected=sys.maxsize,
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
         # node_builder = builder.Node(json_node)
-        return proxies.UnknownProxy(self._nats, f"{domain}.{app_id}", json_node)
+        return proxies.UnknownProxy(self._nats, f"{domain}.{app_name}", json_node)
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
@@ -212,10 +275,28 @@ class NodeManager(Node):
         return None
 
     async def get_remote_node(self, *segments: str) -> proxies.NodeProxy:
+        """ Retrieve a remote node proxy.
+
+            >>> remote_node = await client.get_remote_node("system", "zigbee", "host", "path", "to", "node")
+
+            :param segments: path segments
+        """
         return await proxies.NodeProxy(self._nats, "", {}).get_node(*segments)
 
     async def get_remote_method(self, *segments: str) -> proxies.MethodProxy:
+        """ Retrieve a remote method proxy.
+
+            >>> remote_method = await client.get_remote_method("system", "zigbee", "host", "path", "to", "method")
+
+            :param segments: path segments
+        """
         return await proxies.NodeProxy(self._nats, "", {}).get_method(*segments)
 
     async def get_remote_attr(self, *segments: str) -> proxies.AttributeProxy:
+        """ Retrieve a remote attribute proxy.
+
+            >>> remote_attr = await client.get_remote_attr("system", "zigbee", "host", "path", "to", "attr")
+
+            :param segments: path segments
+        """
         return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments)

@@ -6,30 +6,55 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Client(NodeManager):
-    """ A simple Vbus client that allows you to discover other bridges.
-        For creating a new bridge use Bridge class. """
+    """ A Vbus client that allows you to discover other bridges.
+        Before using it, you must connect it with :func:`~vbus.Client.connect`
+
+        >>> from vbus import Client
+        >>> client = Client("system", "myapp")
+        >>> await client.connect()
+    """
     def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None):
-        """
-        Creates a new Client.
-        :param app_domain: Application domain : "system" for now
-        :param app_id: Application identifier
-        :param loop: Asyncio loop
-        :param hub_id: Hub id
+        """ Creates a new Client.
+            :param app_domain: Application domain : "system" for now
+            :param app_id: Application identifier
+            :param loop: Asyncio loop
+            :param hub_id: Hub id
         """
         self._nats = ExtendedNatsClient(app_domain, app_id, loop, hub_id)
         super().__init__(self._nats)
 
     @property
     def hostname(self) -> str:
+        """ The current hostname.
+
+            :getter: Returns the current hostname
+            :type: str
+        """
         return self._nats.hostname
 
     @property
     def id(self) -> str:
+        """ The app id.
+            The app id is equal to ${app_domain}.${app_name}
+
+            >>> client.id
+            >>> "system.myapp"
+
+            :getter: Returns the app id
+            :type: str
+        """
         return self._nats.id
 
     async def connect(self):
+        """ Connect this client to the Vbus."""
         await self._nats.async_connect()
         await self.initialize()
 
-    async def ask_permission(self, permission) -> bool:
+    async def ask_permission(self, permission: str) -> bool:
+        """ Request authorization for a vbus path.
+
+            >>> ok = await client.ask_permission("system.zigbee.>")
+
+            :param permission: A Vbus path, for example "system.zigbee.>"
+         """
         return await self._nats.ask_permission(permission)
