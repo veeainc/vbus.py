@@ -8,7 +8,7 @@ from typing import Callable, Dict, Iterator, Optional, Awaitable
 from .helpers import join_path, get_path_in_dict, NOTIF_GET, is_wildcard_path
 from .nats import ExtendedNatsClient
 from .definitions import Definition
-from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED
+from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED, NOTIF_VALUE_SETTED
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class UnknownProxy(Proxy):
         return NodeProxy(self._nats, self._path, self._raw_node)
 
 
-AttrSubscribeSetCallable = Callable[['NodeProxy'], Awaitable[None]]
+AttrSubscribeSetCallable = Callable[[any], Awaitable[None]]
 
 
 class AttributeProxy(Proxy):
@@ -150,13 +150,18 @@ class AttributeProxy(Proxy):
     async def subscribe_set(self, on_set: AttrSubscribeSetCallable):
         """ Subscribe to 'set' notifications. It is fired when someone set a new value for this attribute.
 
-            :param on_set: The callback, example: async def on_set(node: NodeProxy)
+            >>> async def on_attr_change(value: any):
+            >>>     print(value)
+            >>>
+            >>> await attr.subscribe_set(on_attr_change)
+
+            :param on_set: The callback
         """
         async def wrap_raw_node(raw_node):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=wrap_raw_node, with_id=False,
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_VALUE_SETTED), cb=wrap_raw_node, with_id=False,
                                                with_host=False)
         self._sids.append(sis)
 
