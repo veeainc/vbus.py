@@ -91,7 +91,7 @@ class UnknownProxy(Proxy):
         return NodeProxy(self._nats, self._path, self._raw_node)
 
 
-AttrSubscribeSetCallable = Callable[[any], Awaitable[None]]
+AttrSubscribeSetCallable = Callable[['NodeProxy'], Awaitable[None]]
 
 
 class AttributeProxy(Proxy):
@@ -150,8 +150,8 @@ class AttributeProxy(Proxy):
     async def subscribe_set(self, on_set: AttrSubscribeSetCallable):
         """ Subscribe to 'set' notifications. It is fired when someone set a new value for this attribute.
 
-            >>> async def on_attr_change(value: any):
-            >>>     print(value)
+            >>> async def on_attr_change(value: NodeProxy):
+            >>>     print(node.tree)  # value
             >>>
             >>> await attr.subscribe_set(on_attr_change)
 
