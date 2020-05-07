@@ -65,9 +65,9 @@ class Node(Element):
 
             The 'raw_node' param contains a node definition in a Python dictionary style. For this you can use node
             definition contained in `vbus.definition` with these alias:
-                N = NodeDef
-                A = AttributeDef
-                M = MethodDef
+            - N = NodeDef
+            - A = AttributeDef
+            - M = MethodDef
 
             :param uuid: Node uuid
             :param raw_node: Raw node definition
