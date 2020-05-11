@@ -14,7 +14,7 @@ from . import definitions
 from . import proxies
 from .helpers import from_vbus, join_path, to_vbus, prune_dict, NOTIF_ADDED, NOTIF_REMOVED, NOTIF_VALUE_SETTED, \
     NOTIF_SETTED, NOTIF_GET
-from .nats import ExtendedNatsClient
+from .nats import ExtendedNatsClient, DEFAULT_TIMEOUT
 
 LOGGER = logging.getLogger(__name__)
 
@@ -274,29 +274,35 @@ class NodeManager(Node):
             return await self._handle_set(parts, data)
         return None
 
-    async def get_remote_node(self, *segments: str) -> proxies.NodeProxy:
+    async def get_remote_node(self, *segments: str, timeout: float = DEFAULT_TIMEOUT) -> proxies.NodeProxy:
         """ Retrieve a remote node proxy.
 
             >>> remote_node = await client.get_remote_node("system", "zigbee", "host", "path", "to", "node")
+            >>> remote_node = await client.get_remote_node("system", "zigbee", "host", "path", "to", "node", timeout=0.8)
 
             :param segments: path segments
+            :param timeout: timeout in seconds (optional)
         """
-        return await proxies.NodeProxy(self._nats, "", {}).get_node(*segments)
+        return await proxies.NodeProxy(self._nats, "", {}).get_node(*segments, timeout=timeout)
 
-    async def get_remote_method(self, *segments: str) -> proxies.MethodProxy:
+    async def get_remote_method(self, *segments: str, timeout: float = DEFAULT_TIMEOUT) -> proxies.MethodProxy:
         """ Retrieve a remote method proxy.
 
             >>> remote_method = await client.get_remote_method("system", "zigbee", "host", "path", "to", "method")
+            >>> remote_method = await client.get_remote_method("system", "zigbee", "host", "path", "to", "method", timeout=0.8)
 
             :param segments: path segments
+            :param timeout: timeout in seconds (optional)
         """
-        return await proxies.NodeProxy(self._nats, "", {}).get_method(*segments)
+        return await proxies.NodeProxy(self._nats, "", {}).get_method(*segments, timeout=timeout)
 
-    async def get_remote_attr(self, *segments: str) -> proxies.AttributeProxy:
+    async def get_remote_attr(self, *segments: str, timeout: float = DEFAULT_TIMEOUT) -> proxies.AttributeProxy:
         """ Retrieve a remote attribute proxy.
 
             >>> remote_attr = await client.get_remote_attr("system", "zigbee", "host", "path", "to", "attr")
+            >>> remote_attr = await client.get_remote_attr("system", "zigbee", "host", "path", "to", "attr", timeout=0.8)
 
             :param segments: path segments
+            :param timeout: timeout in seconds (optional)
         """
-        return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments)
+        return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments, timeout=timeout)

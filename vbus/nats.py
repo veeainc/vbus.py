@@ -15,6 +15,8 @@ ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
 VBUS_URL = 'VBUS_URL'
 
+DEFAULT_TIMEOUT = 0.5
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -249,7 +251,7 @@ class ExtendedNatsClient:
             path = '.'.join(filter(None, [self.id, path]))
         return path
 
-    async def async_request(self, path: str, data: any, timeout: float = 0.5, with_id: bool = True,
+    async def async_request(self, path: str, data: any, timeout: float = DEFAULT_TIMEOUT, with_id: bool = True,
                             with_host: bool = True) -> any:
         path = self._get_path(path, with_id, with_host)
         msg = await self._nats.request(path, to_vbus(data), timeout=timeout)

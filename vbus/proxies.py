@@ -6,7 +6,7 @@ import logging
 from typing import Callable, Dict, Iterator, Optional, Awaitable
 
 from .helpers import join_path, get_path_in_dict, NOTIF_GET, is_wildcard_path
-from .nats import ExtendedNatsClient
+from .nats import ExtendedNatsClient, DEFAULT_TIMEOUT
 from .definitions import Definition
 from .helpers import NOTIF_ADDED, NOTIF_REMOVED, NOTIF_SETTED, NOTIF_VALUE_SETTED
 
@@ -50,6 +50,7 @@ class UnknownProxy(Proxy):
     """ Represents an unknown remote element.
         It can be a node, an attribute or a method.
     """
+
     def __init__(self, nats: ExtendedNatsClient, path: str, attr_def: dict):
         super().__init__(nats, path)
         self._raw_node = attr_def
@@ -157,11 +158,13 @@ class AttributeProxy(Proxy):
 
             :param on_set: The callback
         """
+
         async def wrap_raw_node(raw_node):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_set(node)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_VALUE_SETTED), cb=wrap_raw_node, with_id=False,
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_VALUE_SETTED), cb=wrap_raw_node,
+                                               with_id=False,
                                                with_host=False)
         self._sids.append(sis)
 
@@ -180,7 +183,7 @@ class NodeProxy(Proxy):
     def __str__(self):
         return str(self.tree)
 
-    async def get_method(self, *parts: str) -> 'MethodProxy' or None:
+    async def get_method(self, *parts: str, timeout: float = DEFAULT_TIMEOUT) -> 'MethodProxy' or None:
         if is_wildcard_path(*parts):
             raise ValueError("wildcard path not supported")
 
@@ -188,7 +191,8 @@ class NodeProxy(Proxy):
         if node_json:
             return MethodProxy(self._nats, self._path + "." + ".".join(parts), node_json)
         # try to load from Vbus
-        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
+        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False,
+                                                     timeout=timeout)
         return MethodProxy(self._nats, join_path(self.path, *parts), element_def)
 
     async def set(self, value: any):
@@ -231,15 +235,16 @@ class NodeProxy(Proxy):
     def has_method(self, name: str):
         return name in self._node_json and Definition.is_method(self._node_json[name])
 
-    async def get_attribute(self, *parts: str) -> AttributeProxy:
+    async def get_attribute(self, *parts: str, timeout: float = DEFAULT_TIMEOUT) -> AttributeProxy:
         raw_elem_def = get_path_in_dict(self._node_json, *parts)
         if raw_elem_def:
             return AttributeProxy(self._nats, join_path(self._path, *parts), raw_elem_def)
         # load from Vbus
-        resp = await self._nats.async_request(join_path(*parts, NOTIF_GET), None, with_host=False, with_id=False)
+        resp = await self._nats.async_request(join_path(*parts, NOTIF_GET), None, with_host=False, with_id=False,
+                                              timeout=timeout)
         return AttributeProxy(self._nats, join_path(self.path, *parts), resp)
 
-    async def get_node(self, *parts: str) -> 'NodeProxy' or None:
+    async def get_node(self, *parts: str, timeout: float = DEFAULT_TIMEOUT) -> 'NodeProxy' or None:
         if is_wildcard_path(*parts):
             raise ValueError("wildcard path not supported")
 
@@ -247,7 +252,8 @@ class NodeProxy(Proxy):
         if n:
             return NodeProxy(self._nats, join_path(self._path, *parts), n)
         # try to load from Vbus
-        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False)
+        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False,
+                                                     timeout=timeout)
         return NodeProxy(self._nats, join_path(self.path, *parts), element_def)
 
     def __getitem__(self, item):
