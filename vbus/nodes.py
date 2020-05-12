@@ -122,8 +122,11 @@ class Node(Element):
         return node
 
     async def get_attribute(self, *parts: str) -> Optional['Attribute']:
-        """ Retrieve a local attribute. """
-        definition = await self._definition.search_path(*parts)
+        """ Retrieve a local attribute.
+
+            :return: None if not found in local tree
+         """
+        definition = await self._definition.search_path(list(parts))
         if not definition:
             return None
 
