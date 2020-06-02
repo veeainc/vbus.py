@@ -19,11 +19,11 @@ setup(
     license='To Be Define',
     packages=['vbus', 'vbus.tests'],
     install_requires=[
-        'zeroconf',
-        'bcrypt',
+        'zeroconf>=0.27.0',
+        'bcrypt>=3.1.7',
         'pydbus',
-        'jsonschema',
-        'asyncio-nats-client',
-        'genson'
+        'jsonschema>=3.2.0',
+        'asyncio-nats-client==0.10.0',
+        'genson>=1.2.1'
     ]
 )
