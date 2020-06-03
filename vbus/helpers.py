@@ -6,6 +6,8 @@ import pydbus
 import logging
 import collections
 from typing import cast, Dict
+from socket import inet_ntoa
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,10 +109,8 @@ def zeroconf_search():
             info = zeroconf.get_service_info(service_type, name)
             LOGGER.debug("Service %s added, service info: %s" % (name, info))
             if "vBus" == name.split(".")[0]:
-                # next step compare host_name to choose the same one than the service if available
-                if vbus_url == "" and b'hostname' in info.properties:
-                    hostname = info.properties[b'hostname'].decode('utf-8')
-                    vbus_url = "nats://" + hostname + ":" + str(info.port)
+                if vbus_url == "" and len(info.addresses) > 0:
+                    vbus_url = "nats://" + inet_ntoa(cast(bytes, info.addresses[0])) + ":" + str(info.port)
                     LOGGER.debug("zeroconf reconstruct: " + vbus_url)
 
     zc = Zeroconf()
