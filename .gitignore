@@ -2,3 +2,4 @@
 vbus/__pycache__/
 venv/
 vbus/tests/__pycache__/
+vbus/tests/scenarios/
