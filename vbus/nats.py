@@ -6,7 +6,7 @@ import socket
 import bcrypt
 import logging
 import asyncio
-from typing import Dict
+from typing import Dict, List, Optional
 from nats.aio.client import Client
 
 from .helpers import get_hostname, to_vbus, from_vbus
@@ -62,10 +62,13 @@ class ExtendedNatsClient:
 
     async def async_connect(self):
         config = self._read_or_get_default_config()
-        server_url = await self._find_vbus_url(config)
+        server_url, new_host = await self._find_vbus_url(config)
 
         # update the config file with the new url
         config["vbus"]["url"] = server_url
+        if new_host:
+            self._remote_hostname = new_host
+        config["vbus"]["hostname"] = self._remote_hostname
         self._save_config_file(config)
 
         await self._publish_user(server_url, config)
@@ -97,9 +100,14 @@ class ExtendedNatsClient:
         await nats.flush()
         await nats.close()
 
-    async def _find_vbus_url(self, config):
+    async def _find_vbus_url(self, config) -> (str, Optional[str]):
+        """
+            :param config: The configuration file as a Python object.
+            :return: The url found
+            :return: The new remote hostname
+        """
         # find Vbus server - strategy 0: get from argument
-        def get_from_hub_id() -> str:
+        def get_from_hub_id() -> (List[str], Optional[str]):
             ip = self._remote_hostname
             try:
                 socket.inet_aton(self._remote_hostname)
@@ -107,23 +115,23 @@ class ExtendedNatsClient:
                 try:
                     ip = socket.gethostbyname(f"{self._remote_hostname}.local")
                 except:
-                    return None  # cannot resolve
-            return f"nats://{ip}:21400"
+                    return []  # cannot resolve
+            return [f"nats://{ip}:21400"], None
 
         # find Vbus server - strategy 1: get url from config file
-        def get_from_config_file() -> str:
-            return config["vbus"]["url"]
+        def get_from_config_file() -> (List[str], Optional[str]):
+            return [config["vbus"]["url"]], config["vbus"]["hostname"] if "vbus" in config and "hostname" in config["vbus"] else None
 
         # find vbus server  - strategy 2: get url from ENV:VBUS_URL
-        def get_from_env() -> str:
-            return os.environ.get("VBUS_URL")
+        def get_from_env() -> (List[str], Optional[str]):
+            return [os.environ.get("VBUS_URL")], None
 
         # find vbus server  - strategy 3: try default url nats://hostname:21400
-        def get_default() -> str:
-            return f"nats://{self._hostname}.veeamesh.local:21400"
+        def get_default() -> (List[str], Optional[str]):
+            return [f"nats://{self._hostname}.veeamesh.local:21400"], None
 
         # find vbus server  - strategy 4: find it using avahi
-        def get_from_zeroconf() -> str:
+        def get_from_zeroconf() -> (List[str], Optional[str]):
             from .helpers import zeroconf_search
             return zeroconf_search()
 
@@ -135,21 +143,26 @@ class ExtendedNatsClient:
             get_from_zeroconf,
         ]
 
-        success = False
-        server_url = ""
-        for strategy in find_server_url_strategies:
-            server_url = strategy()
-            if await self._test_vbus_url(server_url):
-                LOGGER.debug("url found using strategy '%s': %s", strategy.__name__, server_url)
-                success = True
-                break
-            else:
-                LOGGER.debug("cannot find a valid url using strategy '%s': %s", strategy.__name__, server_url)
+        success_url = None
+        new_host = None
 
-        if not success:
+        for strategy in find_server_url_strategies:
+            if success_url:
+                break
+
+            server_urls, new_host = strategy()
+            for url in server_urls:
+                if await self._test_vbus_url(url):
+                    LOGGER.debug("url found using strategy '%s': %s", strategy.__name__, url)
+                    success_url = url
+                    break
+                else:
+                    LOGGER.debug("cannot find a valid url using strategy '%s': %s", strategy.__name__, url)
+
+        if not success_url:
             raise ConnectionError("cannot find a valid Vbus url")
         else:
-            return server_url
+            return success_url, new_host
 
     async def _test_vbus_url(self, url: str, user="anonymous", pwd="anonymous") -> bool:
         if not url:
@@ -201,7 +214,8 @@ class ExtendedNatsClient:
                     "key": password
                 },
                 "vbus": {
-                    "url": None
+                    "url": None,
+                    "hostname": None,
                 }
             }
 
