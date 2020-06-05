@@ -79,8 +79,14 @@ class ExtendedNatsClient:
 
     async def ask_permission(self, permission) -> bool:
         config = self._read_or_get_default_config()
-        config["auth"]["permissions"]["subscribe"].append(permission)
-        config["auth"]["permissions"]["publish"].append(permission)
+
+        subscribe = config["auth"]["permissions"]["subscribe"]
+        if permission not in subscribe:
+            subscribe.append(permission)
+
+        publish = config["auth"]["permissions"]["publish"]
+        if permission not in publish:
+            publish.append(permission)
         path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
 
         resp = await self.async_request(path, config["auth"]["permissions"], timeout=10, with_id=False, with_host=False)
