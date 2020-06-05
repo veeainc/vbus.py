@@ -254,10 +254,10 @@ class ExtendedNatsClient:
             if m:
                 try:
                     ret = await cb(from_vbus(msg.data), *m.groups())
+                    if msg.reply:
+                        await self._nats.publish(msg.reply, to_vbus(ret))
                 except Exception as e:
                     LOGGER.exception(e)
-                if msg.reply:
-                    await self._nats.publish(msg.reply, to_vbus(ret))
 
         return await self.nats.subscribe(path, cb=on_data)
 
