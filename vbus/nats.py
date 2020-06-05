@@ -6,7 +6,7 @@ import socket
 import bcrypt
 import logging
 import asyncio
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
 
 from .helpers import get_hostname, to_vbus, from_vbus
@@ -107,7 +107,7 @@ class ExtendedNatsClient:
             :return: The new remote hostname
         """
         # find Vbus server - strategy 0: get from argument
-        def get_from_hub_id() -> (List[str], Optional[str]):
+        def get_from_hub_id() -> Tuple[List[str], Optional[str]]:
             ip = self._remote_hostname
             try:
                 socket.inet_aton(self._remote_hostname)
@@ -115,23 +115,23 @@ class ExtendedNatsClient:
                 try:
                     ip = socket.gethostbyname(f"{self._remote_hostname}.local")
                 except:
-                    return []  # cannot resolve
+                    return [], None  # cannot resolve
             return [f"nats://{ip}:21400"], None
 
         # find Vbus server - strategy 1: get url from config file
-        def get_from_config_file() -> (List[str], Optional[str]):
+        def get_from_config_file() -> Tuple[List[str], Optional[str]]:
             return [config["vbus"]["url"]], config["vbus"]["hostname"] if "vbus" in config and "hostname" in config["vbus"] else None
 
         # find vbus server  - strategy 2: get url from ENV:VBUS_URL
-        def get_from_env() -> (List[str], Optional[str]):
+        def get_from_env() -> Tuple[List[str], Optional[str]]:
             return [os.environ.get("VBUS_URL")], None
 
         # find vbus server  - strategy 3: try default url nats://hostname:21400
-        def get_default() -> (List[str], Optional[str]):
+        def get_default() -> Tuple[List[str], Optional[str]]:
             return [f"nats://{self._hostname}.veeamesh.local:21400"], None
 
         # find vbus server  - strategy 4: find it using avahi
-        def get_from_zeroconf() -> (List[str], Optional[str]):
+        def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
             from .helpers import zeroconf_search
             return zeroconf_search()
 
@@ -171,7 +171,10 @@ class ExtendedNatsClient:
         nc = Client()
         LOGGER.debug("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
         try:
-            await nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1, max_reconnect_attempts=2)
+            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1, max_reconnect_attempts=2)
+
+            # Wait for at most 5 seconds, in some case nats library is stuck...
+            await asyncio.wait_for(task, timeout=5)
         except Exception:
             return False
         else:
