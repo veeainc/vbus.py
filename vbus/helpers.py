@@ -5,7 +5,7 @@ import socket
 import pydbus
 import logging
 import collections
-from typing import cast, Dict
+from typing import cast, Dict, List, Optional
 from socket import inet_ntoa
 
 
@@ -96,25 +96,32 @@ def generate_password(length=22, chars=string.ascii_letters + string.digits):
     return ''.join(new_pass)
 
 
-def zeroconf_search():
+def zeroconf_search() -> (List[str], Optional[str]):
+    """ Search nats server using Mdns.
+        It can returns several url to test.
+    """
     from zeroconf import ServiceBrowser, Zeroconf, ServiceStateChange
 
-    vbus_url = ""
+    url_found = []
+    remote_hostname = None
 
     def on_service_state_change(zeroconf: Zeroconf, service_type, name, state_change: ServiceStateChange) -> None:
-        nonlocal vbus_url
+        nonlocal url_found, remote_hostname
 
         LOGGER.debug("Service %s of type %s state changed: %s" % (name, service_type, state_change))
         if state_change is ServiceStateChange.Added:
             info = zeroconf.get_service_info(service_type, name)
             LOGGER.debug("Service %s added, service info: %s" % (name, info))
             if "vBus" == name.split(".")[0]:
-                if vbus_url == "" and len(info.addresses) > 0:
-                    vbus_url = "nats://" + inet_ntoa(cast(bytes, info.addresses[0])) + ":" + str(info.port)
-                    LOGGER.debug("zeroconf reconstruct: " + vbus_url)
+                if len(info.addresses) > 0:
+                    if b'host' in info.properties and b'hostname' in info.properties:
+                        url_found.append("nats://" + info.properties[b'host'].decode() + ":" + str(info.port))
+                        remote_hostname = info.properties[b'hostname'].decode()
+                    url_found.append("nats://" + inet_ntoa(cast(bytes, info.addresses[0])) + ":" + str(info.port))
+                    LOGGER.debug("zeroconf reconstruct: %s", ", ".join(url_found))
 
     zc = Zeroconf()
     browser = ServiceBrowser(zc, "_nats._tcp.local.", handlers=[on_service_state_change])
     time.sleep(5)
     zc.close()
-    return vbus_url
+    return url_found, remote_hostname
