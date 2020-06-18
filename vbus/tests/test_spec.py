@@ -1,7 +1,10 @@
+import asyncio
 import sys
 import unittest
 import vbus
 import logging
+
+from vbus.proxies import NodeProxy
 from vbus.tests.utils import async_test, setup_test, retry
 
 
@@ -68,6 +71,26 @@ class TestStringMethods(unittest.TestCase):
 
         meth = await client.add_method("echo", echo)
         self.assertIsNotNone(meth)
+
+        self.assert_player_success(player)
+
+    @async_test
+    async def test_remote_attribute_subscribe_set(self):
+        player = setup_test("./scenarios/remote_attribute_subscribe_set.json")
+        client = await self.new_client()
+
+        remote_attr = await client.get_remote_attr("test", "remote", client.hostname, "name")
+        self.assertIsNotNone(remote_attr)
+
+        event = asyncio.Event()
+
+        async def on_change(node: NodeProxy, **kwargs):
+            event.set()
+
+        await remote_attr.subscribe_set(on_set=on_change)
+
+        # wait for on_change event
+        await asyncio.wait_for(event.wait(), 1)
 
         self.assert_player_success(player)
 
