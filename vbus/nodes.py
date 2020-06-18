@@ -169,6 +169,48 @@ class Method(Element):
         self._definition = definition
 
 
+class ModuleStatus:
+    def __init__(self, heap_size: int):
+        self.heap_size = heap_size
+
+    def to_repr(self) -> Dict:
+        return {
+            "heapSize": self.heap_size,
+        }
+
+    @staticmethod
+    def from_repr(d: Dict) -> 'ModuleStatus':
+        return ModuleStatus(heap_size=d['heapSize'])
+
+
+class ModuleInfo:
+    def __init__(self, _id, hostname, client: str, has_static_files: bool, status: ModuleStatus):
+        self.id = _id
+        self.hostname = hostname
+        self.client = client
+        self.has_static_files = has_static_files
+        self.status = status
+
+    def to_repr(self) -> Dict:
+        return {
+            "id"            : self.id,
+            "hostname"      : self.hostname,
+            "client"        : self.client,
+            "hasStaticFiles": self.has_static_files,
+            "status"        : self.status.to_repr(),
+        }
+
+    @staticmethod
+    def from_repr(d: Dict) -> 'ModuleInfo':
+        return ModuleInfo(
+            _id=d['id'],
+            hostname=d['hostname'],
+            client=d['client'],
+            has_static_files=d['hasStaticFiles'],
+            status=ModuleStatus.from_repr(d['status']),
+        )
+
+
 class NodeManager(Node):
     """ This is the VBus nodes manager.
         It manage local nodes lifecycle and allow to retrieve remote nodes.
@@ -177,9 +219,15 @@ class NodeManager(Node):
         Note: The client inherits from the NodeManager
     """
 
-    def __init__(self, nats: ExtendedNatsClient):
+    def __init__(self, nats: ExtendedNatsClient, static_path: str = None):
+        """ Creates a new NodeManager.
+
+            :param nats: The extended nats client
+            :param static_path: Static file path
+        """
         super().__init__(nats, "", definitions.NodeDef({}))
         self._nats = nats
+        self._static_path = static_path
 
     async def initialize(self):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
@@ -227,8 +275,26 @@ class NodeManager(Node):
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
-        # node_builder = builder.Node(json_node)
         return proxies.UnknownProxy(self._nats, f"{domain}.{app_name}", json_node)
+
+    async def discover_modules(self, timeout: int = 1) -> List[ModuleInfo]:
+        """ Discover running vBus modules.
+        """
+        resp: List[ModuleInfo] = []
+
+        async def async_on_discover(msg):
+            nonlocal resp
+            json_data = from_vbus(msg.data)
+            info = ModuleInfo.from_repr(json_data)
+            resp.append(info)
+
+        sid = await self._nats.nats.request(f"info",
+                                            b"",
+                                            expected=sys.maxsize,
+                                            cb=async_on_discover)
+        await asyncio.sleep(timeout)
+        await self._nats.nats.unsubscribe(sid)
+        return resp
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
