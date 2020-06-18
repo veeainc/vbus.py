@@ -4,7 +4,9 @@
     user performs action on it. For example: add a child node, delete a node, call a method, etc...
 """
 import abc
+import os
 import sys
+import base64
 import asyncio
 import logging
 from typing import Dict, Callable, Awaitable, List, Optional
@@ -233,6 +235,22 @@ class NodeManager(Node):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
         await self._nats.async_subscribe("info", cb=self._on_get_module_info, with_id=False, with_host=False)
+
+        # handle static file server
+        if self._static_path is not None:
+            await self.add_method("static", self._static_file_method)
+
+    async def _static_file_method(self, method: str, uri: str, **kwargs) -> str:
+        """ A vBus method to serve static files through vBus. """
+        LOGGER.debug("static: received %s on %s", method, uri)
+
+        file_path = os.path.join(self._static_path, uri)
+        if not os.path.exists(file_path):
+            file_path = os.path.join(self._static_path, "index.html")  # assume SPA
+
+        with open(file_path, 'rb') as f:
+            content = base64.b64encode(f.read()).decode()
+            return content
 
     async def discover(self, domain: str, app_name: str, timeout: int = 1, level: int = None) -> proxies.UnknownProxy:
         """ Discover a remote bus tree (A Vbus tree is composed of Vbus elements).
