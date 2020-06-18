@@ -178,6 +178,8 @@ class NodeProxy(Proxy):
 
     @property
     def tree(self) -> Dict:
+        """ Returns the raw node structure.
+        """
         return self._node_json
 
     def __str__(self):
@@ -260,6 +262,12 @@ class NodeProxy(Proxy):
         return self._node_json[item]
 
     async def subscribe_add(self, *parts: str, on_add: Callable):
+        """ Subscribe to add event on this node.
+
+            :param parts: extra path where to subscribe
+            :param on_add: Callback to be called
+        """
+
         async def wrap_raw_node(raw_node, *args):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_add(node, *args)
@@ -269,6 +277,12 @@ class NodeProxy(Proxy):
         self._sids.append(sis)
 
     async def subscribe_del(self, *parts: str, on_del: Callable):
+        """ Subscribe to del event on this node.
+
+            :param parts: extra path where to subscribe
+            :param on_del: Callback to be called
+        """
+
         async def wrap_raw_node(raw_node, *args):
             node = NodeProxy(self._nats, self._path, raw_node)
             await on_del(node, *args)
