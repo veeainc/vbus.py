@@ -232,6 +232,7 @@ class NodeManager(Node):
     async def initialize(self):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
+        await self._nats.async_subscribe("info", cb=self._on_get_module_info, with_id=False, with_host=False)
 
     async def discover(self, domain: str, app_name: str, timeout: int = 1, level: int = None) -> proxies.UnknownProxy:
         """ Discover a remote bus tree (A Vbus tree is composed of Vbus elements).
@@ -342,6 +343,22 @@ class NodeManager(Node):
         elif method == NOTIF_SETTED:
             return await self._handle_set(parts, data)
         return None
+
+    async def _on_get_module_info(self, data):
+        from psutil import Process
+        from os import getpid
+
+        process = Process(getpid())
+
+        return ModuleInfo(
+            _id=self._nats.id,
+            hostname=self._nats.hostname,
+            client="python",
+            has_static_files=self._static_path is not None,
+            status=ModuleStatus(
+                heap_size=process.memory_info().rss
+            )
+        ).to_repr()
 
     async def get_remote_node(self, *segments: str, timeout: float = DEFAULT_TIMEOUT) -> proxies.NodeProxy:
         """ Retrieve a remote node proxy.
