@@ -24,6 +24,7 @@ setup(
         'pydbus',
         'jsonschema>=3.2.0',
         'asyncio-nats-client==0.10.0',
-        'genson>=1.2.1'
+        'genson>=1.2.1',
+        'psutil>=5.7.0'
     ]
 )

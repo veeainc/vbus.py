@@ -4,7 +4,9 @@
     user performs action on it. For example: add a child node, delete a node, call a method, etc...
 """
 import abc
+import os
 import sys
+import base64
 import asyncio
 import logging
 from typing import Dict, Callable, Awaitable, List, Optional
@@ -169,6 +171,48 @@ class Method(Element):
         self._definition = definition
 
 
+class ModuleStatus:
+    def __init__(self, heap_size: int):
+        self.heap_size = heap_size
+
+    def to_repr(self) -> Dict:
+        return {
+            "heapSize": self.heap_size,
+        }
+
+    @staticmethod
+    def from_repr(d: Dict) -> 'ModuleStatus':
+        return ModuleStatus(heap_size=d['heapSize'])
+
+
+class ModuleInfo:
+    def __init__(self, _id, hostname, client: str, has_static_files: bool, status: ModuleStatus):
+        self.id = _id
+        self.hostname = hostname
+        self.client = client
+        self.has_static_files = has_static_files
+        self.status = status
+
+    def to_repr(self) -> Dict:
+        return {
+            "id"            : self.id,
+            "hostname"      : self.hostname,
+            "client"        : self.client,
+            "hasStaticFiles": self.has_static_files,
+            "status"        : self.status.to_repr(),
+        }
+
+    @staticmethod
+    def from_repr(d: Dict) -> 'ModuleInfo':
+        return ModuleInfo(
+            _id=d['id'],
+            hostname=d['hostname'],
+            client=d['client'],
+            has_static_files=d['hasStaticFiles'],
+            status=ModuleStatus.from_repr(d['status']),
+        )
+
+
 class NodeManager(Node):
     """ This is the VBus nodes manager.
         It manage local nodes lifecycle and allow to retrieve remote nodes.
@@ -177,13 +221,36 @@ class NodeManager(Node):
         Note: The client inherits from the NodeManager
     """
 
-    def __init__(self, nats: ExtendedNatsClient):
+    def __init__(self, nats: ExtendedNatsClient, static_path: str = None):
+        """ Creates a new NodeManager.
+
+            :param nats: The extended nats client
+            :param static_path: Static file path
+        """
         super().__init__(nats, "", definitions.NodeDef({}))
         self._nats = nats
+        self._static_path = static_path
 
     async def initialize(self):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
+        await self._nats.async_subscribe("info", cb=self._on_get_module_info, with_id=False, with_host=False)
+
+        # handle static file server
+        if self._static_path is not None:
+            await self.add_method("static", self._static_file_method)
+
+    async def _static_file_method(self, method: str, uri: str, **kwargs) -> str:
+        """ A vBus method to serve static files through vBus. """
+        LOGGER.debug("static: received %s on %s", method, uri)
+
+        file_path = os.path.join(self._static_path, uri)
+        if not os.path.exists(file_path):
+            file_path = os.path.join(self._static_path, "index.html")  # assume SPA
+
+        with open(file_path, 'rb') as f:
+            content = base64.b64encode(f.read()).decode()
+            return content
 
     async def discover(self, domain: str, app_name: str, timeout: int = 1, level: int = None) -> proxies.UnknownProxy:
         """ Discover a remote bus tree (A Vbus tree is composed of Vbus elements).
@@ -227,8 +294,26 @@ class NodeManager(Node):
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
-        # node_builder = builder.Node(json_node)
         return proxies.UnknownProxy(self._nats, f"{domain}.{app_name}", json_node)
+
+    async def discover_modules(self, timeout: int = 1) -> List[ModuleInfo]:
+        """ Discover running vBus modules.
+        """
+        resp: List[ModuleInfo] = []
+
+        async def async_on_discover(msg):
+            nonlocal resp
+            json_data = from_vbus(msg.data)
+            info = ModuleInfo.from_repr(json_data)
+            resp.append(info)
+
+        sid = await self._nats.nats.request(f"info",
+                                            b"",
+                                            expected=sys.maxsize,
+                                            cb=async_on_discover)
+        await asyncio.sleep(timeout)
+        await self._nats.nats.unsubscribe(sid)
+        return resp
 
     async def _on_get_nodes(self, data):
         """ Get all nodes. """
@@ -276,6 +361,22 @@ class NodeManager(Node):
         elif method == NOTIF_SETTED:
             return await self._handle_set(parts, data)
         return None
+
+    async def _on_get_module_info(self, data):
+        from psutil import Process
+        from os import getpid
+
+        process = Process(getpid())
+
+        return ModuleInfo(
+            _id=self._nats.id,
+            hostname=self._nats.hostname,
+            client="python",
+            has_static_files=self._static_path is not None,
+            status=ModuleStatus(
+                heap_size=process.memory_info().rss
+            )
+        ).to_repr()
 
     async def get_remote_node(self, *segments: str, timeout: float = DEFAULT_TIMEOUT) -> proxies.NodeProxy:
         """ Retrieve a remote node proxy.
