@@ -138,6 +138,21 @@ class Node(Element):
         else:
             return None
 
+    async def get_method(self, *parts: str) -> Optional['Method']:
+        """ Retrieve a local method.
+
+            :return: None if not found in local tree
+         """
+        definition = await self._definition.search_path(list(parts))
+        if not definition:
+            return None
+
+        # test that the definition is a method def
+        if isinstance(definition, definitions.MethodDef):
+            return Method(self._client, join_path(*parts), definition, self)
+        else:
+            return None
+
     async def remove_element(self, uuid: str) -> None:
         """ Delete a node and notify VBus. """
         definition = self._definition.remove_child(uuid)
