@@ -254,7 +254,7 @@ class NodeProxy(Proxy):
         if n:
             return NodeProxy(self._nats, join_path(self._path, *parts), n)
         # try to load from Vbus
-        element_def = await self._nats.async_request(join_path(*parts, 'get'), None, with_host=False, with_id=False,
+        element_def = await self._nats.async_request(join_path(self.path, *parts, 'get'), None, with_host=False, with_id=False,
                                                      timeout=timeout)
         return NodeProxy(self._nats, join_path(self.path, *parts), element_def)
 
@@ -367,7 +367,7 @@ class MethodProxy(Proxy):
         """
         return self._node_def["returns"]["schema"]
 
-    async def call(self, *args: any, timeout_sec: float = 0.5, with_host=False, with_id=False, ):
+    async def call(self, *args: any, timeout_sec: float = 0.5, with_host=False, with_id=False):
         """ Make a remote procedure call.
 
             >>> method_proxy.params_schema
