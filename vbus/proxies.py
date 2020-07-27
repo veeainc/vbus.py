@@ -291,6 +291,26 @@ class NodeProxy(Proxy):
                                                with_id=False, with_host=False)
         self._sids.append(sis)
 
+    async def subscribe_set(self, on_set: AttrSubscribeSetCallable):
+        """ Subscribe to 'set' event on this node.
+
+            >>> async def on_node_change(value: NodeProxy, **kwargs):
+            >>>     print(node.tree)  # value
+            >>>
+            >>> await node.subscribe_set(on_node_change)
+
+            :param on_set: The callback
+        """
+
+        async def wrap_raw_node(raw_node):
+            node = NodeProxy(self._nats, self._path, raw_node)
+            await on_set(node)
+
+        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=wrap_raw_node,
+                                               with_id=False,
+                                               with_host=False)
+        self._sids.append(sis)
+
 
 class WildcardNodeProxy(Proxy):
     """ Represents remote node actions on wildcard path ('*'). """
