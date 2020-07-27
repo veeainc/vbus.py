@@ -186,6 +186,12 @@ class Method(Element):
         self._definition = definition
 
 
+    async def call(self, *args: any, timeout_sec: float = DEFAULT_TIMEOUT):
+        """ Make a remote procedure call.
+        """
+        return await self._client.async_request(join_path(self.path, NOTIF_SETTED), tuple(args), timeout=timeout_sec)
+
+
 class ModuleStatus:
     def __init__(self, heap_size: int):
         self.heap_size = heap_size
