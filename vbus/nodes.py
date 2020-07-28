@@ -311,7 +311,7 @@ class NodeManager(Node):
 
         sid = await self._nats.nats.request(f"{domain}.{app_name}",
                                             to_vbus(filters),
-                                            expected=sys.maxsize,
+                                            expected=99999,  # a big number to wait until timeout, sys.maxsize seems to break nats sometime
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)
