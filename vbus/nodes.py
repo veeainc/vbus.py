@@ -373,7 +373,7 @@ class NodeManager(Node):
     async def _on_get_path(self, data, path: str):
         """ Get a specific path in a node. """
         parts = path.split('.')
-        if len(parts) < 2:
+        if len(parts) < 1:
             return
 
         method = parts.pop()
