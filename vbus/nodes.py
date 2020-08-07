@@ -6,6 +6,7 @@
 import abc
 import os
 import sys
+import socket
 import base64
 import asyncio
 import logging
@@ -29,6 +30,7 @@ class Element(abc.ABC):
         self._uuid = uuid
         self._definition = definition
         self._parent = parent
+        self._urisNode: Optional[Node] = None
 
     @property
     def uuid(self) -> str:
@@ -431,3 +433,13 @@ class NodeManager(Node):
             :param timeout: timeout in seconds (optional)
         """
         return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments, timeout=timeout)
+
+    async def expose(self, name: str, protocol: str, port: int, path: str):
+        addr = socket.gethostbyname(self._client.hostname)
+        uri = "%s://%s:%d/%s".format(protocol, addr, port, path)
+
+        if self._urisNode is None:
+            node = await self.add_node("uris", {})
+            self._urisNode = node
+
+        await self._urisNode.add_attribute(name, uri)
