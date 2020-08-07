@@ -1,5 +1,5 @@
 """
-    This example demonstrate how to expose static files.
+    This example demonstrate how to expose an uri.
 """
 import asyncio
 
@@ -11,8 +11,11 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 async def main():
-    client = Client("system", "client_python", static_path="./")
+    client = Client("system", "client_python")
     await client.connect()
+
+    await client.expose("frontend", 'http', '80', 'google')
+
     stopped = asyncio.Event()
     await stopped.wait()
 
