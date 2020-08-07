@@ -436,7 +436,7 @@ class NodeManager(Node):
 
     async def expose(self, name: str, protocol: str, port: int, path: str):
         addr = socket.gethostbyname(self._client.hostname)
-        uri = "%s://%s:%d/%s".format(protocol, addr, port, path)
+        uri = "{}://{}:{}/{}".format(protocol, addr, port, path)
 
         if self._urisNode is None:
             node = await self.add_node("uris", {})
