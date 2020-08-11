@@ -434,7 +434,7 @@ class NodeManager(Node):
         """
         return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments, timeout=timeout)
 
-    async def expose(self, name: str, protocol: str, port: int, path: str):
+    async def expose(self, name: str, protocol: str, port: int, path: str = ''):
         network_ip = self._nats.network_ip
 
         if not network_ip:
