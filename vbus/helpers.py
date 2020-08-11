@@ -100,17 +100,18 @@ def generate_password(length=22, chars=string.ascii_letters + string.digits):
     return ''.join(new_pass)
 
 
-def zeroconf_search() -> (List[str], Optional[str]):
+def zeroconf_search() -> (List[str], Optional[str], Optional[str]):
     """ Search nats server using Mdns.
         It can returns several url to test.
     """
     from zeroconf import ServiceBrowser, Zeroconf, ServiceStateChange
 
-    url_found = []
-    remote_hostname = None
+    url_found: List[str] = []
+    remote_hostname: Optional[str] = None
+    network_ip: Optional[str] = None
 
     def on_service_state_change(zeroconf: Zeroconf, service_type, name, state_change: ServiceStateChange) -> None:
-        nonlocal url_found, remote_hostname
+        nonlocal url_found, remote_hostname, network_ip
 
         LOGGER.debug("Service %s of type %s state changed: %s" % (name, service_type, state_change))
         if state_change is ServiceStateChange.Added:
@@ -119,13 +120,14 @@ def zeroconf_search() -> (List[str], Optional[str]):
             if "vBus" == name.split(".")[0]:
                 if len(info.addresses) > 0:
                     if b'host' in info.properties and b'hostname' in info.properties:
-                        url_found.append("nats://" + info.properties[b'host'].decode() + ":" + str(info.port))
+                        network_ip = info.properties[b'host'].decode()
+                        url_found.append('nats://{}:{}'.format(network_ip, info.port))
                         remote_hostname = info.properties[b'hostname'].decode()
-                    url_found.append("nats://" + inet_ntoa(cast(bytes, info.addresses[0])) + ":" + str(info.port))
+                    url_found.append('nats://{}:{}'.format(inet_ntoa(cast(bytes, info.addresses[0])), info.port))
                     LOGGER.debug("zeroconf reconstruct: %s", ", ".join(url_found))
 
     zc = Zeroconf()
     browser = ServiceBrowser(zc, "_nats._tcp.local.", handlers=[on_service_state_change])
     time.sleep(5)
     zc.close()
-    return url_found, remote_hostname
+    return url_found, remote_hostname, network_ip

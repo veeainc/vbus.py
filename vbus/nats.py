@@ -38,6 +38,7 @@ class ExtendedNatsClient:
         if not self._root_folder:
             self._root_folder = self._env['HOME'] + "/vbus/"
         self._nats = Client()
+        self._network_ip: Optional[str] = None  # populated during mdns discovery
 
     @property
     def hostname(self) -> str:
@@ -51,6 +52,11 @@ class ExtendedNatsClient:
     @property
     def nats(self) -> Client:
         return self._nats
+
+    @property
+    def network_ip(self) -> Optional[str]:
+        """ Return network ip, discovered during Mdns phase. (can be empty)"""
+        return self._network_ip
 
     @staticmethod
     def _read_env_vars():
@@ -141,7 +147,9 @@ class ExtendedNatsClient:
         # find vbus server  - strategy 4: find it using avahi
         def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
             from .helpers import zeroconf_search
-            return zeroconf_search()
+            urls, host, network_ip = zeroconf_search()
+            self._network_ip = network_ip
+            return urls, host
 
         find_server_url_strategies = [
             get_from_hub_id,
@@ -215,7 +223,7 @@ class ExtendedNatsClient:
                     return config
                 else:
                     LOGGER.warning('invalid configuration detected, the file will be reset to the default one (%s)',
-                                    config)
+                                   config)
                     return self._create_default_config()
         else:
             return self._create_default_config()

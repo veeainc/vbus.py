@@ -435,8 +435,14 @@ class NodeManager(Node):
         return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments, timeout=timeout)
 
     async def expose(self, name: str, protocol: str, port: int, path: str):
-        addr = socket.gethostbyname(self._client.hostname)
-        uri = "{}://{}:{}/{}".format(protocol, addr, port, path)
+        network_ip = self._nats.network_ip
+
+        if not network_ip:
+            network_ip = self._nats.nats.connected_url.hostname
+            LOGGER.warning('expose: network ip not populated, using nats connection ip instead: %s', network_ip)
+
+        uri = "{}://{}:{}/{}".format(protocol, network_ip, port, path)
+        LOGGER.debug('expose: %s', uri)
 
         if self._urisNode is None:
             node = await self.add_node("uris", {})
