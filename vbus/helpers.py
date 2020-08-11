@@ -8,7 +8,6 @@ import collections
 from typing import cast, Dict, List, Optional
 from socket import inet_ntoa
 
-
 LOGGER = logging.getLogger(__name__)
 
 # constants
@@ -70,6 +69,11 @@ def get_path_in_dict(d: Dict, *parts: str):
         else:
             return None  # not found
     return root
+
+
+def key_exists(d: Dict, *parts: str) -> bool:
+    """ Check whether or not a key exist in the dictionnary"""
+    return get_path_in_dict(d, *parts) is not None
 
 
 def is_wildcard_path(*parts: str) -> bool:

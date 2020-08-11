@@ -9,7 +9,7 @@ import asyncio
 from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
 
-from .helpers import get_hostname, to_vbus, from_vbus
+from .helpers import get_hostname, to_vbus, from_vbus, key_exists
 
 ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
@@ -55,9 +55,9 @@ class ExtendedNatsClient:
     @staticmethod
     def _read_env_vars():
         return {
-            'HOME': os.environ.get('HOME'),
+            'HOME'   : os.environ.get('HOME'),
             VBUS_PATH: os.environ.get(VBUS_PATH),
-            VBUS_URL: os.environ.get(VBUS_URL),
+            VBUS_URL : os.environ.get(VBUS_URL),
         }
 
     async def async_connect(self):
@@ -112,6 +112,7 @@ class ExtendedNatsClient:
             :return: The url found
             :return: The new remote hostname
         """
+
         # find Vbus server - strategy 0: get from argument
         def get_from_hub_id() -> Tuple[List[str], Optional[str]]:
             ip = self._remote_hostname
@@ -126,7 +127,8 @@ class ExtendedNatsClient:
 
         # find Vbus server - strategy 1: get url from config file
         def get_from_config_file() -> Tuple[List[str], Optional[str]]:
-            return [config["vbus"]["url"]], config["vbus"]["hostname"] if "vbus" in config and "hostname" in config["vbus"] else None
+            return [config["vbus"]["url"]], config["vbus"]["hostname"] if "vbus" in config and "hostname" in config[
+                "vbus"] else None
 
         # find vbus server  - strategy 2: get url from ENV:VBUS_URL
         def get_from_env() -> Tuple[List[str], Optional[str]]:
@@ -177,7 +179,8 @@ class ExtendedNatsClient:
         nc = Client()
         LOGGER.debug("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
         try:
-            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1, max_reconnect_attempts=2)
+            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
+                              max_reconnect_attempts=2)
 
             # Wait for at most 5 seconds, in some case nats library is stuck...
             await asyncio.wait_for(task, timeout=5)
@@ -186,8 +189,17 @@ class ExtendedNatsClient:
         else:
             return True
 
+    @staticmethod
+    def _validate_configuration(c: Dict):
+        """ Validate the config file structure. """
+        return key_exists(c, 'auth', 'user') and \
+               key_exists(c, 'auth', 'password') and \
+               key_exists(c, 'auth', 'permissions') and \
+               key_exists(c, 'private', 'key') and \
+               key_exists(c, 'vbus', 'url') and \
+               key_exists(c, 'vbus', 'hostname')
+
     def _read_or_get_default_config(self) -> Dict:
-        from .helpers import generate_password
 
         if not os.access(self._root_folder, os.F_OK):
             os.mkdir(self._root_folder)
@@ -198,39 +210,51 @@ class ExtendedNatsClient:
             LOGGER.debug("load existing configuration file for " + self._id)
             with open(config_file, 'r') as content_file:
                 content = content_file.read()
-                return json.loads(content)
+                config = json.loads(content)
+                if self._validate_configuration(config):
+                    return config
+                else:
+                    LOGGER.warning('invalid configuration detected, the file will be reset to the default one (%s)',
+                                    config)
+                    return self._create_default_config()
         else:
-            LOGGER.debug("create new configuration file for " + self._id)
-            # TODO: this template should be in a git repo shared between all vbus impl
-            password = generate_password()
-            public_key = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=11, prefix=b"2a"))
-            return {
-                "auth": {
-                    "user": f"{self._id}.{self._hostname}",
-                    "password": public_key.decode('utf-8'),
-                    "permissions": {
-                        "subscribe": [
-                            f"{self._id}",
-                            f"{self._id}.>",
-                        ],
-                        "publish": [
-                            f"{self._id}",
-                            f"{self._id}.>",
-                        ],
-                    }
-                },
-                "private": {
-                    "key": password
-                },
-                "vbus": {
-                    "url": None,
-                    "hostname": None,
+            return self._create_default_config()
+
+    def _create_default_config(self):
+        """ Creates the default configuration. """
+        from .helpers import generate_password
+
+        LOGGER.debug("create new configuration file for " + self._id)
+        # TODO: this template should be in a git repo shared between all vbus impl
+        password = generate_password()
+        public_key = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=11, prefix=b"2a"))
+        return {
+            "auth"   : {
+                "user"       : f"{self._id}.{self._hostname}",
+                "password"   : public_key.decode('utf-8'),
+                "permissions": {
+                    "subscribe": [
+                        f"{self._id}",
+                        f"{self._id}.>",
+                    ],
+                    "publish"  : [
+                        f"{self._id}",
+                        f"{self._id}.>",
+                    ],
                 }
+            },
+            "private": {
+                "key": password
+            },
+            "vbus"   : {
+                "url"     : None,
+                "hostname": None,
             }
+        }
 
     def _save_config_file(self, config):
         config_file = os.path.join(self._root_folder, self._id + ".conf")
-        LOGGER.debug("try to open config file " + config_file)
+        LOGGER.debug("saving configuration file: " + config_file)
         with open(config_file, 'w+') as f:
             json.dump(config, f)
 
