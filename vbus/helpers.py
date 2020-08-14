@@ -73,7 +73,13 @@ def get_path_in_dict(d: Dict, *parts: str):
 
 def key_exists(d: Dict, *parts: str) -> bool:
     """ Check whether or not a key exist in the dictionnary"""
-    return get_path_in_dict(d, *parts) is not None
+    root = d
+    for part in parts:
+        if part in root:
+            root = root[part]
+        else:
+            return False
+    return True
 
 
 def is_wildcard_path(*parts: str) -> bool:
