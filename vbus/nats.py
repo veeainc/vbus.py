@@ -74,7 +74,10 @@ class ExtendedNatsClient:
         config["vbus"]["url"] = server_url
         if new_host:
             self._remote_hostname = new_host
+
         config["vbus"]["hostname"] = self._remote_hostname
+        config["vbus"]["networkIp"] = self._network_ip
+
         self._save_config_file(config)
 
         await self._publish_user(server_url, config)
@@ -205,7 +208,8 @@ class ExtendedNatsClient:
                key_exists(c, 'auth', 'permissions') and \
                key_exists(c, 'private', 'key') and \
                key_exists(c, 'vbus', 'url') and \
-               key_exists(c, 'vbus', 'hostname')
+               key_exists(c, 'vbus', 'hostname') and \
+               key_exists(c, 'vbus', 'networkIp')
 
     def _read_or_get_default_config(self) -> Dict:
 
@@ -255,8 +259,9 @@ class ExtendedNatsClient:
                 "key": password
             },
             "vbus"   : {
-                "url"     : None,
-                "hostname": None,
+                "url"      : None,
+                "hostname" : None,
+                "networkIp": None,
             }
         }
 
