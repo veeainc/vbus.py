@@ -10,7 +10,7 @@ import socket
 import base64
 import asyncio
 import logging
-from typing import Dict, Callable, Awaitable, List, Optional
+from typing import Dict, Callable, Awaitable, List, Optional, Union
 
 from vbus.definitions import Definition
 from . import definitions
@@ -59,7 +59,7 @@ class Node(Element):
         self._definition = definition
 
     async def add_node(self, uuid: str, raw_node: definitions.RawNode, on_set: Callable = None) -> 'Node':
-        """ Add a new node in this tree.
+        """ Add a new raw node in this tree.
 
             >>> node = await client.add_node("00:45:25:65:25:ff", {
             >>>     'name': definitions.A("name", None),    # add an attribute
@@ -83,6 +83,23 @@ class Node(Element):
 
         # send the node definition on Vbus
         packet = {uuid: await definition.to_repr()}
+        await self._client.async_publish(join_path(self.path, NOTIF_ADDED), packet)
+        return node
+
+    async def add_node_def(self, uuid: str, node_def: Union[definitions.NodeDef, definitions.AsyncNodeDef], on_set: Callable = None) -> 'Node':
+        """ Add a new node definition in this tree.
+
+            >>> node = await client.add_node_def("00:45:25:65:25:ff", definitions.NodeDef({...}, on_set=on_set))
+
+            :param uuid: Node uuid
+            :param node_def: Node definition
+            :param on_set: A callback called when setted
+        """
+        node = Node(self._client, uuid, node_def, self)  # create the connected node
+        self._definition.add_child(uuid, node_def)  # add it
+
+        # send the node definition on Vbus
+        packet = {uuid: await node_def.to_repr()}
         await self._client.async_publish(join_path(self.path, NOTIF_ADDED), packet)
         return node
 
