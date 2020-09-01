@@ -33,7 +33,7 @@ async def main():
     await devices_node.subscribe_del(on_del=on_device_left)
 
     scan_method = await client.get_remote_method("system", "zigbee", client.hostname, "controller", "scan")
-    await scan_method.call(20, timeout_sec=25)  # scan for 20 secs
+    await scan_method.call(120, timeout_sec=125)  # scan for 20 secs
 
     print("press Ctrl+C to stop.")
     stopped = asyncio.Event()

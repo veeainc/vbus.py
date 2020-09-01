@@ -55,6 +55,12 @@ async def main():
     value = await temp.get_value(in_cache=False, timeout=25)
     print("temperature: ", value)
 
+    async def temp_changed(node):
+        print(node)
+
+    print("listening temp...")
+    await temp.subscribe_set(temp_changed)
+
     # read humidity one time
     hum = await node.get_attribute(SENSOR_HOST, "devices", SENSOR_IEEE, "endpoints", "2", "in_clusters", "1029", "attributes", "0")
     if not hum:
@@ -62,6 +68,12 @@ async def main():
 
     value = await hum.get_value(in_cache=False, timeout=25)
     print("humidity: ", value)
+
+    async def hum_changed(node):
+        print(node)
+
+    print("listening humidity...")
+    await hum.subscribe_set(hum_changed)
 
     stopped = asyncio.Event()
     await stopped.wait()
