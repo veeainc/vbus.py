@@ -82,23 +82,23 @@ class ExtendedNatsClient:
 
         await self._publish_user(server_url, config)
         await asyncio.sleep(1, loop=self._loop)
-        await self._nats.connect(server_url, io_loop=self._loop, user=config["auth"]["user"],
-                                 password=config["private"]["key"], connect_timeout=1, max_reconnect_attempts=2,
-                                 name=config["auth"]["user"], closed_cb=self._async_nats_closed)
+        await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
+                                 password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
+                                 name=config["client"]["user"], closed_cb=self._async_nats_closed)
 
     async def ask_permission(self, permission) -> bool:
         config = self._read_or_get_default_config()
 
-        subscribe = config["auth"]["permissions"]["subscribe"]
+        subscribe = config["client"]["permissions"]["subscribe"]
         if permission not in subscribe:
             subscribe.append(permission)
 
-        publish = config["auth"]["permissions"]["publish"]
+        publish = config["client"]["permissions"]["publish"]
         if permission not in publish:
             publish.append(permission)
         path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
 
-        resp = await self.async_request(path, config["auth"]["permissions"], timeout=10, with_id=False, with_host=False)
+        resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False, with_host=False)
         self._save_config_file(config)
         return resp
 
@@ -110,7 +110,7 @@ class ExtendedNatsClient:
         await nats.connect(server_url, loop=self._loop,
                            user="anonymous", password="anonymous",
                            connect_timeout=1, max_reconnect_attempts=2)
-        data = json.dumps(config["auth"]).encode('utf-8')
+        data = json.dumps(config["client"]).encode('utf-8')
         await nats.publish("system.authorization." + self._remote_hostname + ".add", data)
         await nats.flush()
         await nats.close()
@@ -203,10 +203,10 @@ class ExtendedNatsClient:
     @staticmethod
     def _validate_configuration(c: Dict):
         """ Validate the config file structure. """
-        return key_exists(c, 'auth', 'user') and \
-               key_exists(c, 'auth', 'password') and \
-               key_exists(c, 'auth', 'permissions') and \
-               key_exists(c, 'private', 'key') and \
+        return key_exists(c, 'client', 'user') and \
+               key_exists(c, 'client', 'password') and \
+               key_exists(c, 'client', 'permissions') and \
+               key_exists(c, 'key', 'private') and \
                key_exists(c, 'vbus', 'url') and \
                key_exists(c, 'vbus', 'hostname') and \
                key_exists(c, 'vbus', 'networkIp')
@@ -241,7 +241,7 @@ class ExtendedNatsClient:
         password = generate_password()
         public_key = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=11, prefix=b"2a"))
         return {
-            "auth"   : {
+            "client"   : {
                 "user"       : f"{self._id}.{self._hostname}",
                 "password"   : public_key.decode('utf-8'),
                 "permissions": {
@@ -255,8 +255,8 @@ class ExtendedNatsClient:
                     ],
                 }
             },
-            "private": {
-                "key": password
+            "key": {
+                "private": password
             },
             "vbus"   : {
                 "url"      : None,
