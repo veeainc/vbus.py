@@ -452,7 +452,8 @@ class NodeManager(Node):
         return await proxies.NodeProxy(self._nats, "", {}).get_attribute(*segments, timeout=timeout)
 
     async def expose(self, name: str, protocol: str, port: int, path: str = ''):
-        network_ip = self._nats.network_ip
+        config = self._client.read_or_get_default_config()
+        network_ip = config["vbus"]["networkIp"]
 
         if not network_ip:
             network_ip = self._nats.nats.connected_url.hostname

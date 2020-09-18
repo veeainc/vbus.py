@@ -68,7 +68,7 @@ class ExtendedNatsClient:
         }
 
     async def async_connect(self):
-        config = self._read_or_get_default_config()
+        config = self.read_or_get_default_config()
         server_url, new_host = await self._find_vbus_url(config)
 
         # update the config file with the new url
@@ -99,7 +99,7 @@ class ExtendedNatsClient:
         LOGGER.debug("connected")
 
     async def ask_permission(self, permission) -> bool:
-        config = self._read_or_get_default_config()
+        config = self.read_or_get_default_config()
         file_changed = False
 
         subscribe = config["client"]["permissions"]["subscribe"]
@@ -237,7 +237,7 @@ class ExtendedNatsClient:
                key_exists(c, 'vbus', 'hostname') and \
                key_exists(c, 'vbus', 'networkIp')
 
-    def _read_or_get_default_config(self) -> Dict:
+    def read_or_get_default_config(self) -> Dict:
 
         if not os.access(self._root_folder, os.F_OK):
             os.mkdir(self._root_folder)
