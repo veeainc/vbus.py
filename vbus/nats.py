@@ -8,6 +8,7 @@ import logging
 import asyncio
 from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
+from nats.aio.errors import NatsError
 
 from .helpers import get_hostname, to_vbus, from_vbus, key_exists
 
@@ -80,11 +81,20 @@ class ExtendedNatsClient:
 
         self._save_config_file(config)
 
-        await self._publish_user(server_url, config)
-        await asyncio.sleep(1, loop=self._loop)
-        await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
-                                 password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
-                                 name=config["client"]["user"], closed_cb=self._async_nats_closed)
+        # try to connect directly and push user if fail
+        try:
+            await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
+                                     password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
+                                     name=config["client"]["user"], closed_cb=self._async_nats_closed)
+        except NatsError:
+            LOGGER.debug("unable to connect with user in config file, adding it")
+            await self._publish_user(server_url, config)
+            await asyncio.sleep(1, loop=self._loop)
+            await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
+                                     password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
+                                     name=config["client"]["user"], closed_cb=self._async_nats_closed)
+
+        LOGGER.debug("connected")
 
     async def ask_permission(self, permission) -> bool:
         config = self._read_or_get_default_config()
@@ -98,7 +108,8 @@ class ExtendedNatsClient:
             publish.append(permission)
         path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
 
-        resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False, with_host=False)
+        resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
+                                        with_host=False)
         self._save_config_file(config)
         return resp
 
@@ -241,7 +252,7 @@ class ExtendedNatsClient:
         password = generate_password()
         public_key = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=11, prefix=b"2a"))
         return {
-            "client"   : {
+            "client": {
                 "user"       : f"{self._id}.{self._hostname}",
                 "password"   : public_key.decode('utf-8'),
                 "permissions": {
@@ -255,10 +266,10 @@ class ExtendedNatsClient:
                     ],
                 }
             },
-            "key": {
+            "key"   : {
                 "private": password
             },
-            "vbus"   : {
+            "vbus"  : {
                 "url"      : None,
                 "hostname" : None,
                 "networkIp": None,
