@@ -137,3 +137,8 @@ def zeroconf_search() -> (List[str], Optional[str], Optional[str]):
     time.sleep(5)
     zc.close()
     return url_found, remote_hostname, network_ip
+
+
+def sanitize_nats_segment(s: str)-> str:
+    """ Replace unwanted characters in a nats segment. """
+    return s.replace(".", "_")

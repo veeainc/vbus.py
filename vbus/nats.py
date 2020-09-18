@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
 from nats.aio.errors import NatsError
 
-from .helpers import get_hostname, to_vbus, from_vbus, key_exists
+from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats_segment
 
 ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
@@ -31,8 +31,8 @@ class ExtendedNatsClient:
         :param loop: asyncio loop
         """
         self._loop = loop or asyncio.get_event_loop()
-        self._hostname: str = get_hostname()
-        self._remote_hostname = hub_id or self._hostname
+        self._hostname: str = sanitize_nats_segment(get_hostname())
+        self._remote_hostname = sanitize_nats_segment(hub_id or self._hostname)
         self._id = f"{app_domain}.{app_id}"
         self._env = self._read_env_vars()
         self._root_folder = self._env[VBUS_PATH]
@@ -74,7 +74,7 @@ class ExtendedNatsClient:
         # update the config file with the new url
         config["vbus"]["url"] = server_url
         if new_host:
-            self._remote_hostname = new_host
+            self._remote_hostname = sanitize_nats_segment(new_host)
 
         config["vbus"]["hostname"] = self._remote_hostname
         config["vbus"]["networkIp"] = self._network_ip
