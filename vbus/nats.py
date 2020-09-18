@@ -77,7 +77,9 @@ class ExtendedNatsClient:
             self._remote_hostname = sanitize_nats_segment(new_host)
 
         config["vbus"]["hostname"] = self._remote_hostname
-        config["vbus"]["networkIp"] = self._network_ip
+
+        if self._network_ip:
+            config["vbus"]["networkIp"] = self._network_ip
 
         self._save_config_file(config)
 
