@@ -98,20 +98,33 @@ class ExtendedNatsClient:
 
     async def ask_permission(self, permission) -> bool:
         config = self._read_or_get_default_config()
+        file_changed = False
 
         subscribe = config["client"]["permissions"]["subscribe"]
         if permission not in subscribe:
             subscribe.append(permission)
+            file_changed = True
 
         publish = config["client"]["permissions"]["publish"]
         if permission not in publish:
             publish.append(permission)
-        path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
+            file_changed = True
 
-        resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
-                                        with_host=False)
-        self._save_config_file(config)
-        return resp
+        if file_changed:
+            LOGGER.debug("permissions changed, sending them to server")
+            path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
+            resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
+                                            with_host=False)
+
+            if resp:
+                self._save_config_file(config)
+            else:
+                LOGGER.warning("cannot send permission to server")
+
+            return resp
+
+        LOGGER.debug("permissions are already ok")
+        return True
 
     async def _async_nats_closed(self):
         await self._nats.close()
