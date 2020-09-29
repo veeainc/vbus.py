@@ -86,7 +86,8 @@ class Node(Element):
         await self._client.async_publish(join_path(self.path, NOTIF_ADDED), packet)
         return node
 
-    async def add_node_def(self, uuid: str, node_def: Union[definitions.NodeDef, definitions.AsyncNodeDef], on_set: Callable = None) -> 'Node':
+    async def add_node_def(self, uuid: str, node_def: Union[definitions.NodeDef, definitions.AsyncNodeDef],
+                           on_set: Callable = None) -> 'Node':
         """ Add a new node definition in this tree.
 
             >>> node = await client.add_node_def("00:45:25:65:25:ff", definitions.NodeDef({...}, on_set=on_set))
@@ -103,7 +104,7 @@ class Node(Element):
         await self._client.async_publish(join_path(self.path, NOTIF_ADDED), packet)
         return node
 
-    async def add_attribute(self, uuid: str, value: any, on_set: definitions.SetCallback = None,
+    async def add_attribute(self, uuid: str, value: any = None, on_set: definitions.SetCallback = None,
                             on_get: definitions.GetCallback = None) -> 'Attribute':
         """ Add a new attribute in this tree. Prefer the use of add_node() with nested attributes directly.
 
@@ -111,6 +112,8 @@ class Node(Element):
 
             :param uuid: Attribute uuid
             :param value: Attribute initial value
+            :param on_set: callback on set
+            :param on_get: callback on get
         """
         definition = definitions.AttributeDef(uuid, value, on_set=on_set, on_get=on_get)  # create the definition
         node = Attribute(self._client, uuid, definition, self)  # create the connected node
@@ -190,9 +193,10 @@ class Attribute(Element):
     def __init__(self, client: ExtendedNatsClient, uuid: str, definition: definitions.AttributeDef,
                  parent: Element = None):
         super().__init__(client, uuid, definition, parent)
-        self._definition = definition
+        self._definition: definitions.AttributeDef = definition
 
     async def set_value(self, value: any):
+        self._definition.value = value
         await self._client.async_publish(join_path(self.path, NOTIF_VALUE_SETTED), value)
 
 
@@ -203,7 +207,6 @@ class Method(Element):
                  parent: Element = None):
         super().__init__(client, uuid, definition, parent)
         self._definition = definition
-
 
     async def call(self, *args: any, timeout_sec: float = DEFAULT_TIMEOUT):
         """ Make a remote procedure call.
@@ -330,7 +333,8 @@ class NodeManager(Node):
 
         sid = await self._nats.nats.request(f"{domain}.{app_name}",
                                             to_vbus(filters),
-                                            expected=99999,  # a big number to wait until timeout, sys.maxsize seems to break nats sometime
+                                            expected=99999,
+                                            # a big number to wait until timeout, sys.maxsize seems to break nats sometime
                                             cb=async_on_discover)
         await asyncio.sleep(timeout)
         await self._nats.nats.unsubscribe(sid)

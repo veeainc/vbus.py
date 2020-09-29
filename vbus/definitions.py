@@ -9,6 +9,7 @@ import genson
 import logging
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Awaitable
+from jsonschema import validate as validate_json, ValidationError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -179,15 +180,17 @@ class AttributeDef(Definition):
         super().__init__()
 
         if value is None and schema is None:
-            LOGGER.warning(f"attribute {uuid} is null, and no schema is specified.")
+            LOGGER.warning(f"attribute {uuid} is null, and no schema is specified, this attribute will be of type 'any'.")
 
         self._key = uuid
         self._value = value
         self._on_set = on_set
         self._on_get = on_get
+        self._schema = None
 
         if schema is None:
-            self._schema = self.to_schema(self._value)
+            if self._value is not None:
+                self._schema = self.to_schema(self._value)
         else:
             self._schema = schema
 
@@ -197,6 +200,11 @@ class AttributeDef(Definition):
 
     @value.setter
     def value(self, value: any):
+        if self._schema:  # if we have a json schema, do validation
+            try:
+                validate_json(instance=value, schema=self._schema)
+            except ValidationError as e:
+                raise ValueError('cannot set attribute {}: {}'.format(self._key, str(e)))
         self._value = value
 
     def to_schema(self, value: any) -> any:
