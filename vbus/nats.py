@@ -319,16 +319,21 @@ class ExtendedNatsClient:
         regex = path.replace(".", r"\.").replace("*", r"([^.]+)").replace(">", r"(.+)")
 
         async def on_data(msg):
-            m = re.match(regex, msg.subject)
-            if m:
-                try:
-                    ret = await cb(from_vbus(msg.data), *m.groups())
-                    if msg.reply:
-                        await self._nats.publish(msg.reply, to_vbus(ret))
-                except Exception as e:
-                    LOGGER.exception(e)
+            # start a task
+            # we don't want to await here because it will block everything while computing the callback.
+            asyncio.get_event_loop().create_task(self._subscribe_on_data_task(cb, regex, msg))
 
         return await self.nats.subscribe(path, cb=on_data)
+
+    async def _subscribe_on_data_task(self, cb, regex, msg):
+        m = re.match(regex, msg.subject)
+        if m:
+            try:
+                ret = await cb(from_vbus(msg.data), *m.groups())
+                if msg.reply:
+                    await self._nats.publish(msg.reply, to_vbus(ret))
+            except Exception as e:
+                LOGGER.exception(e)
 
     def _get_path(self, path: str, with_id: bool, with_host: bool):
         if with_host:
