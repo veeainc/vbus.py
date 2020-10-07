@@ -136,7 +136,7 @@ class AttributeProxy(Proxy):
 
             :param value: The value (must match the Json-schema)
         """
-        return await self._nats.async_publish(self._path + ".set", value, with_host=False, with_id=False)
+        return await self._nats.async_publish(join_path(self._path, NOTIF_VALUE_SETTED), value, with_host=False, with_id=False)
 
     async def get_value(self, in_cache=False, timeout=1):
         """ A synchronous read operation. It ask to the remote app to read a new value for this attribute.
