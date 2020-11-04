@@ -236,6 +236,13 @@ class ExtendedNatsClient:
                key_exists(c, 'vbus', 'url') and \
                key_exists(c, 'vbus', 'hostname') and \
                key_exists(c, 'vbus', 'networkIp')
+    
+    def _check_config_hostname(self, c: Dict):
+        _extracted_conf_name = c["client"]["user"].split('.')[2]
+        if _extracted_conf_name != self._hostname:
+            LOGGER.debug("Replace user: " + c["client"]["user"])
+            c["client"]["user"] = c["client"]["user"].replace(_extracted_conf_name, self._hostname)
+            LOGGER.debug("with: " + c["client"]["user"])
 
     def read_or_get_default_config(self) -> Dict:
 
@@ -250,6 +257,7 @@ class ExtendedNatsClient:
                 content = content_file.read()
                 config = json.loads(content)
                 if self._validate_configuration(config):
+                    self._check_config_hostname(config)
                     return config
                 else:
                     LOGGER.warning('invalid configuration detected, the file will be reset to the default one (%s)',
