@@ -15,6 +15,7 @@ from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats
 ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
 VBUS_URL = 'VBUS_URL'
+PATH_TO_INFO = "system.info"
 
 DEFAULT_TIMEOUT = 0.5
 
@@ -76,6 +77,11 @@ class ExtendedNatsClient:
         if new_host:
             self._remote_hostname = sanitize_nats_segment(new_host)
 
+        if self._hostname.isnumeric():
+            LOGGER.debug("hostname is numerical - change it with remote hostname")
+            self._hostname = self._remote_hostname
+            config["client"]["user"] = f"{self._id}.{self._hostname}"
+
         config["vbus"]["hostname"] = self._remote_hostname
 
         if self._network_ip:
@@ -95,6 +101,11 @@ class ExtendedNatsClient:
             await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
                                      password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
                                      name=config["client"]["user"], closed_cb=self._async_nats_closed)
+
+        await asyncio.sleep(1, loop=self._loop)
+        path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
+        resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
+                                            with_host=False)
 
         LOGGER.debug("connected")
 
@@ -171,7 +182,9 @@ class ExtendedNatsClient:
 
         # find vbus server  - strategy 3: try default url nats://hostname:21400
         def get_default() -> Tuple[List[str], Optional[str]]:
-            return [f"nats://{self._hostname}.veeamesh.local:21400"], None
+            dns_url = f"nats://vbus.service.veeamesh.local:21400"
+            newHost = self._get_hostname_from_vBus(dns_url[0])
+            return [dns_url], newHost
 
         # find vbus server  - strategy 4: find it using avahi
         def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
@@ -225,6 +238,30 @@ class ExtendedNatsClient:
             return False
         else:
             return True
+
+    async def _get_hostname_from_vBus(self, url: str, user="anonymous", pwd="anonymous") -> str:
+        if not url:
+            return ""
+
+        vbus_hostname = ""
+        nc = Client()
+        LOGGER.debug("get info to: " + url + " with user: " + user + " and pwd: " + pwd)
+        try:
+            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
+                              max_reconnect_attempts=2)
+
+            # Wait for at most 5 seconds, in some case nats library is stuck...
+            await asyncio.wait_for(task, timeout=5)
+
+            msg = await nc.request(PATH_TO_INFO, None, timeout=timeout)
+            LOGGER.debug("vBus info: %s", msg)
+            vbus_info = json.loads(msg.Data)
+            vbus_hostname = vbus_info["hostname"]
+            
+        except Exception:
+            return ""
+        else:
+            return vbus_hostname
 
     @staticmethod
     def _validate_configuration(c: Dict):
