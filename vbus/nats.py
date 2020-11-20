@@ -77,10 +77,14 @@ class ExtendedNatsClient:
         if new_host:
             self._remote_hostname = sanitize_nats_segment(new_host)
 
-        if self._hostname.isnumeric():
+
+        try:
+            containerID = int(self._hostname, 16)
             LOGGER.debug("hostname is numerical - change it with remote hostname")
             self._hostname = self._remote_hostname
             config["client"]["user"] = f"{self._id}.{self._hostname}"
+        except:
+            LOGGER.debug("hostname is alphabetical: keep it")
 
         config["vbus"]["hostname"] = self._remote_hostname
 
