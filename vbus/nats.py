@@ -186,9 +186,7 @@ class ExtendedNatsClient:
 
         # find vbus server  - strategy 3: try default url nats://hostname:21400
         def get_default() -> Tuple[List[str], Optional[str]]:
-            dns_url = f"nats://vbus.service.veeamesh.local:21400"
-            newHost = self._get_hostname_from_vBus(dns_url[0])
-            return [dns_url], newHost
+            return [f"nats://vbus.service.veeamesh.local:21400"], None
 
         # find vbus server  - strategy 4: find it using avahi
         def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
@@ -217,6 +215,9 @@ class ExtendedNatsClient:
                 if await self._test_vbus_url(url):
                     LOGGER.debug("url found using strategy '%s': %s", strategy.__name__, url)
                     success_url = url
+                    newHost = await self._get_hostname_from_vBus(url)
+                    if newHost != "":
+                        new_host = newHost
                     break
                 else:
                     LOGGER.debug("cannot find a valid url using strategy '%s': %s", strategy.__name__, url)
@@ -249,7 +250,6 @@ class ExtendedNatsClient:
 
         vbus_hostname = ""
         nc = Client()
-        LOGGER.debug("get info to: " + url + " with user: " + user + " and pwd: " + pwd)
         try:
             task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
                               max_reconnect_attempts=2)
@@ -257,11 +257,14 @@ class ExtendedNatsClient:
             # Wait for at most 5 seconds, in some case nats library is stuck...
             await asyncio.wait_for(task, timeout=5)
 
-            msg = await nc.request(PATH_TO_INFO, None, timeout=timeout)
-            LOGGER.debug("vBus info: %s", msg)
-            vbus_info = json.loads(msg.Data)
-            vbus_hostname = vbus_info["hostname"]
-            
+            try:                           
+                msg = await nc.request(PATH_TO_INFO, b'', timeout=10)
+                data = msg.data.decode()
+                LOGGER.debug(data)                          
+                vbus_info = json.loads(data)
+                vbus_hostname = vbus_info["hostname"]                      
+            except ErrTimeout:
+                print("Request vbus.info timed out")
         except Exception:
             return ""
         else:
