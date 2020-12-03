@@ -10,12 +10,13 @@ from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
 from nats.aio.errors import NatsError
 
-from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats_segment
+from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats_segment, get_ip
 
 ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
 VBUS_URL = 'VBUS_URL'
 PATH_TO_INFO = "system.info"
+VBUS_DNS = "vbus.service.veeamesh.local"
 
 DEFAULT_TIMEOUT = 0.5
 
@@ -248,6 +249,8 @@ class ExtendedNatsClient:
         if not url:
             return ""
 
+        serverIP = get_ip(VBUS_DNS)
+
         vbus_hostname = ""
         nc = Client()
         try:
@@ -258,7 +261,7 @@ class ExtendedNatsClient:
             await asyncio.wait_for(task, timeout=5)
 
             try:                           
-                msg = await nc.request(PATH_TO_INFO, b'', timeout=10)
+                msg = await nc.request(PATH_TO_INFO, to_vbus(serverIP), timeout=10)
                 data = msg.data.decode()
                 LOGGER.debug(data)                          
                 vbus_info = json.loads(data)

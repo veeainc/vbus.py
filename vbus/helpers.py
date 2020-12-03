@@ -142,3 +142,16 @@ def zeroconf_search() -> (List[str], Optional[str], Optional[str]):
 def sanitize_nats_segment(s: str)-> str:
     """ Replace unwanted characters in a nats segment. """
     return s.replace(".", "_")
+
+def get_ip(d: str)-> str:
+    """
+    This method returns the first IP address string
+    that responds as the given domain name
+    """
+    try:
+        data = socket.gethostbyname(d)
+        ip = repr(data)
+        return ip
+    except Exception:
+        # fail gracefully!
+        return ""
