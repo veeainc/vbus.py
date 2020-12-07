@@ -5,7 +5,7 @@ import socket
 import pydbus
 import logging
 import collections
-from typing import cast, Dict, List, Optional
+from typing import cast, Dict, List, Optional, Tuple
 from socket import inet_ntoa
 
 LOGGER = logging.getLogger(__name__)
@@ -19,20 +19,22 @@ NOTIF_SETTED = "set"
 NOTIF_VALUE_SETTED = "value.set"
 
 
-def get_hostname() -> str:
+def get_hostname() -> Tuple[str, str]:
     """ Try to retrieve the hostname using Veea dbus api. If it fails, return
         socket.gethostname() value.
     """
     hostname = socket.gethostname()
+    isvh = False
 
     # try to get hostname if we are on a hub
     try:
         bus = pydbus.SystemBus()
         hostname = bus.get('io.veea.VeeaHub.Info').Hostname()
+        isvh = True
     except Exception:
         pass
 
-    return hostname
+    return hostname, isvh
 
 
 def from_vbus(data: bytes) -> Dict or None:

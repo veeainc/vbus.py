@@ -32,8 +32,10 @@ class ExtendedNatsClient:
         :param remote_host: optional, the remote hostname to use to login
         :param loop: asyncio loop
         """
+        hostname, isvh = get_hostname()
         self._loop = loop or asyncio.get_event_loop()
-        self._hostname: str = sanitize_nats_segment(get_hostname())
+        self._hostname: str = sanitize_nats_segment(hostname)
+        self._isvh = isvh
         self._remote_hostname = sanitize_nats_segment(hub_id or self._hostname)
         self._id = f"{app_domain}.{app_id}"
         self._env = self._read_env_vars()
@@ -79,13 +81,13 @@ class ExtendedNatsClient:
             self._remote_hostname = sanitize_nats_segment(new_host)
 
 
-        try:
-            containerID = int(self._hostname, 16)
-            LOGGER.debug("hostname is numerical - change it with remote hostname")
-            self._hostname = self._remote_hostname
-            config["client"]["user"] = f"{self._id}.{self._hostname}"
-        except:
-            LOGGER.debug("hostname is alphabetical: keep it")
+        # try:
+        #     containerID = int(self._hostname, 16)
+        #     LOGGER.debug("hostname is numerical - change it with remote hostname")
+        #     self._hostname = self._remote_hostname
+        #     config["client"]["user"] = f"{self._id}.{self._hostname}"
+        # except:
+        #     LOGGER.debug("hostname is alphabetical: keep it")
 
         config["vbus"]["hostname"] = self._remote_hostname
 
@@ -185,23 +187,35 @@ class ExtendedNatsClient:
         def get_from_env() -> Tuple[List[str], Optional[str]]:
             return [os.environ.get("VBUS_URL")], None
 
-        # find vbus server  - strategy 3: try default url nats://hostname:21400
-        def get_default() -> Tuple[List[str], Optional[str]]:
-            return [f"nats://vbus.service.veeamesh.local:21400"], None
+        # find vbus server  - strategy 3: try default url client://hostname.service.veeamesh.local:21400
+        def get_local_default() -> Tuple[List[str], Optional[str]]:
+            return [f"nats://"+self._hostname+".service.veeamesh.local:21400"], None
 
         # find vbus server  - strategy 4: find it using avahi
         def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
-            from .helpers import zeroconf_search
-            urls, host, network_ip = zeroconf_search()
-            self._network_ip = network_ip
-            return urls, host
+            if self._isvh == False:
+                from .helpers import zeroconf_search
+                urls, host, network_ip = zeroconf_search()
+                self._network_ip = network_ip
+                return urls, host
+            else:
+                return [f""], None
+            
+
+        # find vbus server  - strategy 5: try global (MEN) url client://vbus.service.veeamesh.local:21400
+        def get_global_default() -> Tuple[List[str], Optional[str]]:
+            if self._isvh == False:
+                return [f"nats://vbus.service.veeamesh.local:21400"], None
+            else:
+                return [f""], None
 
         find_server_url_strategies = [
             get_from_hub_id,
             get_from_config_file,
             get_from_env,
-            get_default,
+            get_local_default,
             get_from_zeroconf,
+            get_global_default,
         ]
 
         success_url = None
