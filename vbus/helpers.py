@@ -151,8 +151,7 @@ def get_ip(d: str)-> str:
     that responds as the given domain name
     """
     try:
-        data = socket.gethostbyname(d)
-        ip = repr(data)
+        ip = socket.gethostbyname(d)
         return ip
     except Exception:
         # fail gracefully!

@@ -275,7 +275,7 @@ class ExtendedNatsClient:
             await asyncio.wait_for(task, timeout=5)
 
             try:                           
-                msg = await nc.request(PATH_TO_INFO, to_vbus(serverIP), timeout=10)
+                msg = await nc.request(PATH_TO_INFO, serverIP.encode('utf-8'), timeout=10)
                 data = msg.data.decode()
                 LOGGER.debug(data)                          
                 vbus_info = json.loads(data)
