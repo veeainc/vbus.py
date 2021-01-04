@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='vbus',
-    version='1.6.1',
+    version='1.6.4',
     description='vBus client',
     long_description='vBus client',
     classifiers=[
@@ -13,7 +13,7 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7'
     ],
-    url='https://vbus@bitbucket.org/vbus/vbus.py.git',
+    url='https://github.com/veeainc/vbus.py.git',
     author='Michael Mardinian',
     author_email='mmardinian@veea.com',
     license='To Be Define',
