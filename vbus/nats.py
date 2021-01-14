@@ -230,9 +230,10 @@ class ExtendedNatsClient:
                 if await self._test_vbus_url(url):
                     LOGGER.debug("url found using strategy '%s': %s", strategy.__name__, url)
                     success_url = url
-                    newHost = await self._get_hostname_from_vBus(url)
-                    if newHost != "":
-                        new_host = newHost
+                    if self._isvh == False:
+                        newHost = await self._get_hostname_from_vBus(url)
+                        if newHost != "":
+                            new_host = newHost
                     break
                 else:
                     LOGGER.debug("cannot find a valid url using strategy '%s': %s", strategy.__name__, url)
