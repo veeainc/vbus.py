@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='vbus',
-    version='1.6.4',
+    version='1.6.5',
     description='vBus client',
     long_description='vBus client',
     classifiers=[
