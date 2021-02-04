@@ -110,9 +110,21 @@ class ExtendedNatsClient:
                                      name=config["client"]["user"], closed_cb=self._async_nats_closed)
 
         await asyncio.sleep(1, loop=self._loop)
+
+        # we are connected, so we loop until permission are been sent successfully
         path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
-        resp = await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
-                                            with_host=False)
+        while True:
+            try:
+                await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
+                                    with_host=False)
+                LOGGER.debug("permission sent")
+                break
+            except:    
+                LOGGER.debug("permission failed to be sent, will retry in 1sec")
+                await asyncio.sleep(1, loop=self._loop)
+                pass
+        
+        
 
         LOGGER.debug("connected")
 
