@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='vbus',
-    version='1.6.6',
+    version='1.7.0',
     description='vBus client',
     long_description='vBus client',
     classifiers=[
@@ -23,7 +23,7 @@ setup(
         'bcrypt>=3.1.7',
         'pydbus',
         'jsonschema>=3.2.0',
-        'asyncio-nats-client==0.11.2',
+        'asyncio-nats-client[nkeys]==0.11.4',
         'genson>=1.2.1',
         'psutil>=5.7.0'
     ]

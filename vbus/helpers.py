@@ -5,6 +5,7 @@ import socket
 import pydbus
 import logging
 import collections
+import jwt
 from typing import cast, Dict, List, Optional, Tuple
 from socket import inet_ntoa
 
@@ -156,3 +157,11 @@ def get_ip(d: str)-> str:
     except Exception:
         # fail gracefully!
         return ""
+
+def get_id_from_cred(creds_file: str)-> str:
+    try:
+        f = open(creds_file, "r")
+        creds_map = jwt.decode(f.read(), options={"verify_signature": False})
+        return creds_map["name"]
+    except Exception:
+        raise ValueError("Credential file fails")

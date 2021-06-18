@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
 from nats.aio.errors import NatsError
 
-from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats_segment, get_ip
+from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats_segment, get_ip, get_id_from_cred
 
 ELEMENT_NODES = "nodes"
 VBUS_PATH = 'VBUS_PATH'
@@ -24,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None):
+    def __init__(self, app_domain: str = None, app_id: str = None, creds_file: str = None, loop=None, hub_id: str = None):
         """
         Create an extended nats client.
         :param app_domain:  for now: system
@@ -37,7 +37,13 @@ class ExtendedNatsClient:
         self._hostname: str = sanitize_nats_segment(hostname)
         self._isvh = isvh
         self._remote_hostname = sanitize_nats_segment(hub_id or self._hostname)
-        self._id = f"{app_domain}.{app_id}"
+        self._creds = creds_file
+        if self._creds != None :
+            self._id =  get_id_from_cred(self._creds)
+            self._vbus_port = "8421"
+        else :
+            self._id = f"{app_domain}.{app_id}"
+            self._vbus_port = "21400"
         self._env = self._read_env_vars()
         self._root_folder = self._env[VBUS_PATH]
         if not self._root_folder:
@@ -96,39 +102,45 @@ class ExtendedNatsClient:
 
         self._save_config_file(config)
 
+        if self._creds == None:
+        # if connection with cred file, already done while url testing and no permission required
         # try to connect directly and push user if fail
-        try:
-            await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
-                                     password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
-                                     name=config["client"]["user"], closed_cb=self._async_nats_closed)
-        except NatsError:
-            LOGGER.debug("unable to connect with user in config file, adding it")
-            await self._publish_user(server_url, config)
-            await asyncio.sleep(1, loop=self._loop)
-            await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
-                                     password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
-                                     name=config["client"]["user"], closed_cb=self._async_nats_closed)
-
-        await asyncio.sleep(1, loop=self._loop)
-
-        # we are connected, so we loop until permission are been sent successfully
-        path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
-        while True:
             try:
-                await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
-                                    with_host=False)
-                LOGGER.debug("permission sent")
-                break
-            except:    
-                LOGGER.debug("permission failed to be sent, will retry in 1sec")
+                await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
+                                        password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
+                                        name=config["client"]["user"], closed_cb=self._async_nats_closed)
+            except NatsError:
+                LOGGER.debug("unable to connect with user in config file, adding it")
+                await self._publish_user(server_url, config)
                 await asyncio.sleep(1, loop=self._loop)
-                pass
+                await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
+                                        password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
+                                        name=config["client"]["user"], closed_cb=self._async_nats_closed)
+
+            await asyncio.sleep(1, loop=self._loop)
+
+            # we are connected, so we loop until permission are been sent successfully
+            path = f"system.authorization.{self._remote_hostname}.{self._id}.{self._hostname}.permissions.set"
+            while True:
+                try:
+                    await self.async_request(path, config["client"]["permissions"], timeout=10, with_id=False,
+                                        with_host=False)
+                    LOGGER.debug("permission sent")
+                    break
+                except:    
+                    LOGGER.debug("permission failed to be sent, will retry in 1sec")
+                    await asyncio.sleep(1, loop=self._loop)
+                    pass
         
         
 
         LOGGER.debug("connected")
 
     async def ask_permission(self, permission) -> bool:
+        if self._creds != None:
+            LOGGER.warning("No Permission request with new Authentification system")
+            return False
+
         config = self.read_or_get_default_config()
         file_changed = False
 
@@ -188,7 +200,7 @@ class ExtendedNatsClient:
                     ip = socket.gethostbyname(f"{self._remote_hostname}.local")
                 except:
                     return [], None  # cannot resolve
-            return [f"nats://{ip}:21400"], None
+            return [f"nats://{ip}:"+self._vbus_port], None
 
         # find Vbus server - strategy 1: get url from config file
         def get_from_config_file() -> Tuple[List[str], Optional[str]]:
@@ -201,7 +213,7 @@ class ExtendedNatsClient:
 
         # find vbus server  - strategy 3: try default url client://hostname.service.veeamesh.local:21400
         def get_local_default() -> Tuple[List[str], Optional[str]]:
-            return [f"nats://"+self._hostname+".service.veeamesh.local:21400"], None
+            return [f"nats://"+self._hostname+".service.veeamesh.local:"+self._vbus_port], None
 
         # find vbus server  - strategy 4: find it using avahi
         def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
@@ -217,7 +229,7 @@ class ExtendedNatsClient:
         # find vbus server  - strategy 5: try global (MEN) url client://vbus.service.veeamesh.local:21400
         def get_global_default() -> Tuple[List[str], Optional[str]]:
             if self._isvh == False:
-                return [f"nats://vbus.service.veeamesh.local:21400"], None
+                return [f"nats://vbus.service.veeamesh.local:"+self._vbus_port], None
             else:
                 return [f""], None
 
@@ -262,7 +274,10 @@ class ExtendedNatsClient:
         nc = Client()
         LOGGER.debug("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
         try:
-            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
+            if self._creds != None:
+                task = self._nats.connect(url, io_loop=self._loop, user_credentials=self._creds, connect_timeout=1, max_reconnect_attempts=2, closed_cb=self._async_nats_closed)
+            else:
+                task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
                               max_reconnect_attempts=2)
 
             # Wait for at most 5 seconds, in some case nats library is stuck...
@@ -281,14 +296,18 @@ class ExtendedNatsClient:
         vbus_hostname = ""
         nc = Client()
         try:
-            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
-                              max_reconnect_attempts=2)
+            if self._creds == None :
+                task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
+                                max_reconnect_attempts=2)
 
-            # Wait for at most 5 seconds, in some case nats library is stuck...
-            await asyncio.wait_for(task, timeout=5)
+                # Wait for at most 5 seconds, in some case nats library is stuck...
+                await asyncio.wait_for(task, timeout=5)
 
-            try:                           
-                msg = await nc.request(PATH_TO_INFO, serverIP.encode('utf-8'), timeout=10)
+            try:
+                if self._creds == None :                         
+                    msg = await nc.request(PATH_TO_INFO, serverIP.encode('utf-8'), timeout=10)
+                else:
+                    msg = await self._nats.request(PATH_TO_INFO, serverIP.encode('utf-8'), timeout=10)
                 data = msg.data.decode()
                 LOGGER.debug(data)                          
                 vbus_info = json.loads(data)
@@ -308,6 +327,13 @@ class ExtendedNatsClient:
                key_exists(c, 'client', 'permissions') and \
                key_exists(c, 'key', 'private') and \
                key_exists(c, 'vbus', 'url') and \
+               key_exists(c, 'vbus', 'hostname') and \
+               key_exists(c, 'vbus', 'networkIp')
+
+    @staticmethod
+    def _validate_configuration_v2(c: Dict):
+        """ Validate the config file structure. """
+        return key_exists(c, 'vbus', 'url') and \
                key_exists(c, 'vbus', 'hostname') and \
                key_exists(c, 'vbus', 'networkIp')
     
@@ -330,22 +356,44 @@ class ExtendedNatsClient:
             with open(config_file, 'r') as content_file:
                 content = content_file.read()
                 config = json.loads(content)
-                if self._validate_configuration(config):
-                    self._check_config_hostname(config)
-                    return config
-                else:
-                    LOGGER.warning('invalid configuration detected, the file will be reset to the default one (%s)',
-                                   config)
-                    return self._create_default_config()
+                if self._creds != None :
+                    if self._validate_configuration(config):
+                        self._check_config_hostname(config)
+                        return config
+                    else:
+                        LOGGER.warning('invalid configuration v2 detected, the file will be reset to the default one (%s)', config)
+                        return self._create_default_config_v2()
+                else :
+                    if self._validate_configuration(config):
+                        self._check_config_hostname(config)
+                        return config
+                    else:
+                        LOGGER.warning('invalid configuration detected, the file will be reset to the default one (%s)', config)
+                        return self._create_default_config()
         else:
-            return self._create_default_config()
+            if self._creds != None :
+                return self._create_default_config_v2()
+            else:
+                return self._create_default_config()
+
+    def _create_default_config_v2(self):
+        """ Creates the default configuration. """
+        LOGGER.debug("create new configuration file v2 for " + self._id)
+        # TODO: this template should be in a git repo shared between all vbus impl
+        return {
+            "vbus"  : {
+                "url"      : None,
+                "hostname" : None,
+                "networkIp": None,
+            }
+        }
 
     def _create_default_config(self):
         """ Creates the default configuration. """
         from .helpers import generate_password
 
         LOGGER.debug("create new configuration file for " + self._id)
-        # TODO: this template should be in a git repo shared between all vbus impl
+
         password = generate_password()
         public_key = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=11, prefix=b"2a"))
         return {
