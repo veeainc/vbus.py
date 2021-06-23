@@ -169,7 +169,7 @@ def get_id_from_cred(creds_file: str)-> str:
                 creds_map = jwt.decode(line.rstrip("\n"), options={"verify_signature": False})
                 return creds_map["name"]
 
-            if line == "-----BEGIN NATS USER JWT-----":
+            if line.rstrip("\n") == "-----BEGIN NATS USER JWT-----":
                 next_is_jwt = True
         
         raise ValueError("No name in credential file")
