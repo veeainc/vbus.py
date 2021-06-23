@@ -161,7 +161,17 @@ def get_ip(d: str)-> str:
 def get_id_from_cred(creds_file: str)-> str:
     try:
         f = open(creds_file, "r")
-        creds_map = jwt.decode(f.read(), options={"verify_signature": False})
-        return creds_map["name"]
+        l = f.readlines()
+        next_is_jwt = False
+        for line in l:
+
+            if next_is_jwt == True:
+                creds_map = jwt.decode(line.rstrip("\n"), options={"verify_signature": False})
+                return creds_map["name"]
+
+            if line == "-----BEGIN NATS USER JWT-----":
+                next_is_jwt = True
+        
+        raise ValueError("No name in credential file")
     except Exception:
         raise ValueError("Credential file fails")
