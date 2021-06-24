@@ -357,8 +357,7 @@ class ExtendedNatsClient:
                 content = content_file.read()
                 config = json.loads(content)
                 if self._creds != None :
-                    if self._validate_configuration(config):
-                        self._check_config_hostname(config)
+                    if self._validate_configuration_v2(config):
                         return config
                     else:
                         LOGGER.warning('invalid configuration v2 detected, the file will be reset to the default one (%s)', config)
