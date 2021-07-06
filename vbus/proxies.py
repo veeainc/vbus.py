@@ -156,14 +156,24 @@ class AttributeProxy(Proxy):
             >>>
             >>> await attr.subscribe_set(on_attr_change)
 
-            :param on_set: The callback
+            :param on_set: The callbacks
         """
+        redirect_path = ''
+        nats_path = join_path(self._path, NOTIF_VALUE_SETTED)
+        
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
 
         async def wrap_raw_node(raw_node):
-            node = NodeProxy(self._nats, self._path, raw_node)
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
             await on_set(node)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_VALUE_SETTED), cb=wrap_raw_node,
+        sis = await self._nats.async_subscribe(nats_path, cb=wrap_raw_node,
                                                with_id=False,
                                                with_host=False)
         self._sids.append(sis)
@@ -267,13 +277,22 @@ class NodeProxy(Proxy):
             :param parts: extra path where to subscribe
             :param on_add: Callback to be called
         """
+        
+        redirect_path = ''
+        nats_path = join_path(self._path,  *parts, NOTIF_ADDED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
 
         async def wrap_raw_node(raw_node, *args):
-            node = NodeProxy(self._nats, self._path, raw_node)
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
             await on_add(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts,
-                                                         NOTIF_ADDED), cb=wrap_raw_node, with_id=False, with_host=False)
+        sis = await self._nats.async_subscribe(nats_path, cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_del(self, *parts: str, on_del: Callable):
@@ -283,11 +302,21 @@ class NodeProxy(Proxy):
             :param on_del: Callback to be called
         """
 
+        redirect_path = ''
+        nats_path = join_path(self._path,  *parts, NOTIF_REMOVED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
+
         async def wrap_raw_node(raw_node, *args):
-            node = NodeProxy(self._nats, self._path, raw_node)
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
             await on_del(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node,
+        sis = await self._nats.async_subscribe(nats_path, cb=wrap_raw_node,
                                                with_id=False, with_host=False)
         self._sids.append(sis)
 
@@ -302,11 +331,21 @@ class NodeProxy(Proxy):
             :param on_set: The callback
         """
 
-        async def wrap_raw_node(raw_node):
-            node = NodeProxy(self._nats, self._path, raw_node)
-            await on_set(node)
+        redirect_path = ''
+        nats_path = join_path(self._path, NOTIF_SETTED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
 
-        sis = await self._nats.async_subscribe(join_path(self._path, NOTIF_SETTED), cb=wrap_raw_node,
+        async def wrap_raw_node(raw_node):
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
+            await on_set(node)   
+
+        sis = await self._nats.async_subscribe(nats_path, cb=wrap_raw_node,
                                                with_id=False,
                                                with_host=False)
         self._sids.append(sis)
@@ -319,29 +358,61 @@ class WildcardNodeProxy(Proxy):
         super().__init__(nats, path)
 
     async def subscribe_set(self, *parts: str, on_set: Callable):
-        async def wrap_raw_node(raw_node, *args):
-            node = NodeProxy(self._nats, self._path, raw_node)
-            await on_set(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_SETTED), cb=wrap_raw_node,
+        redirect_path = ''
+        nats_path = join_path(self._path, *parts, NOTIF_SETTED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
+
+        async def wrap_raw_node(raw_node, *args):
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
+            await on_set(node, *args)   
+
+        sis = await self._nats.async_subscribe( nats_path, cb=wrap_raw_node,
                                                with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_add(self, *parts: str, on_add: Callable):
-        async def wrap_raw_node(raw_node, *args):
-            node = NodeProxy(self._nats, self._path, raw_node)
-            await on_add(node, *args)
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_ADDED), cb=wrap_raw_node,
+        redirect_path = ''
+        nats_path = join_path(self._path, *parts, NOTIF_ADDED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
+
+        async def wrap_raw_node(raw_node, *args):
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
+            await on_add(node, *args)   
+
+        sis = await self._nats.async_subscribe(nats_path, cb=wrap_raw_node,
                                                with_id=False, with_host=False)
         self._sids.append(sis)
 
     async def subscribe_del(self, *parts: str, on_del: Callable):
-        async def wrap_raw_node(raw_node, *args):
-            node = NodeProxy(self._nats, self._path, raw_node)
-            await on_del(node, *args)
+        redirect_path = ''
+        nats_path = join_path(self._path, *parts, NOTIF_REMOVED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, NOTIF_REMOVED), cb=wrap_raw_node,
+        async def wrap_raw_node(raw_node, *args):
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
+            await on_del(node, *args)  
+
+        sis = await self._nats.async_subscribe( nats_path, cb=wrap_raw_node,
                                                with_id=False, with_host=False)
         self._sids.append(sis)
 
@@ -353,12 +424,21 @@ class WildcardAttrProxy(Proxy):
         super().__init__(nats, path)
 
     async def subscribe_set(self, *parts: str, on_set: Callable):
-        async def wrap_raw_node(raw_node, *args):
-            node = NodeProxy(self._nats, self._path, raw_node)
-            await on_set(node, *args)
+        redirect_path = ''
+        nats_path = join_path(self._path, *parts, "value", NOTIF_SETTED)
+        # if domain different => different account => request a wired subscribe
+        path_split = self._path.split('.')
+        if path_split[0] != self._nats._id.split('.')[0]:
+            await self._nats.async_publish(path_split[0] + '.' + path_split[1] + ".subscribe.add", self._nats._id, with_host=False, with_id=False)
+            redirect_path = self._nats._id + '.'
+            nats_path = redirect_path + nats_path
 
-        sis = await self._nats.async_subscribe(join_path(self._path, *parts, "value", NOTIF_SETTED),
-                                               cb=wrap_raw_node, with_id=False, with_host=False)
+        async def wrap_raw_node(raw_node, *args):
+            path = self._path.replace(redirect_path, '')
+            node = NodeProxy(self._nats, path, raw_node)
+            await on_set(node, *args) 
+
+        sis = await self._nats.async_subscribe(nats_path, cb=wrap_raw_node, with_id=False, with_host=False)
         self._sids.append(sis)
 
 

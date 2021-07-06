@@ -278,10 +278,30 @@ class NodeManager(Node):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)
         await self._nats.async_subscribe(">", cb=self._on_get_path)
         await self._nats.async_subscribe("info", cb=self._on_get_module_info, with_id=False, with_host=False)
+        await self._nats.async_subscribe("subscribe.add", cb=self._on_add_subscribers, with_host=False)
 
         # handle static file server
         if self._static_path is not None:
             await self.add_method("static", self._static_file_method)
+
+        # handle external subscriber list that need re-routed publish
+        try:
+            hosts_list = await self.discover(self._client._id,"subscribe.get", 2)
+            if len(hosts_list):
+                for sub_list in hosts_list:
+                    for sub in sub_list:
+                        self._add_subscribers(sub)
+        except:
+            LOGGER.warning('could not retrieve %v.subscribe.get', self._client._id)
+
+    def _add_subscribers(self, route):
+        if route in self._client._subscriber_list:
+            return
+        self._client._subscriber_list.append(route)
+        
+
+    async def _on_add_subscribers(self, data, path: str):
+        self.__add_subscribers(data)
 
     async def _static_file_method(self, method: str, uri: str, **kwargs) -> str:
         """ A vBus method to serve static files through vBus. """

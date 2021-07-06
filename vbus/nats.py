@@ -50,6 +50,7 @@ class ExtendedNatsClient:
             self._root_folder = self._env['HOME'] + "/vbus/"
         self._nats = Client()
         self._network_ip: Optional[str] = None  # populated during mdns discovery
+        self._subscriber_list = [] # to store subscribers with redirections
 
     @property
     def hostname(self) -> str:
@@ -479,5 +480,7 @@ class ExtendedNatsClient:
 
     async def async_publish(self, path: str, data: any, with_id: bool = True, with_host: bool = True):
         path = self._get_path(path, with_id, with_host)
+        for redirect in self._subscriber_list:
+            await self._nats.publish(redirect + "." + path, to_vbus(data))
         await self._nats.publish(path, to_vbus(data))
         await self._nats.flush()
