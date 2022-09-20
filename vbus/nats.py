@@ -2,21 +2,26 @@ import re
 import os
 import json
 import socket
-
+import ssl
 import bcrypt
 import logging
 import asyncio
 from typing import Dict, List, Optional, Tuple
 from nats.aio.client import Client
 from nats.aio.errors import NatsError
+import importlib.resources as pkg_resources
+from . import certificate  # relative-import the *package* containing the templates
 
 from .helpers import get_hostname, to_vbus, from_vbus, key_exists, sanitize_nats_segment, get_ip
 
-ELEMENT_NODES = "nodes"
+USER_CONFIG = "USER_CONFIG"
+USER_CONFIG_FILE = "/usr/local/config/defaults/user-config.json"
+VBUS_PATH = 'VBUS_PATH'
 VBUS_PATH = 'VBUS_PATH'
 VBUS_URL = 'VBUS_URL'
 PATH_TO_INFO = "system.info"
 VBUS_DNS = "vbus.service.veeamesh.local"
+DEFAULT_PASSWORD= "anonymous"
 
 DEFAULT_TIMEOUT = 0.5
 
@@ -24,7 +29,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExtendedNatsClient:
-    def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None):
+    def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None, password: str = None):
         """
         Create an extended nats client.
         :param app_domain:  for now: system
@@ -44,6 +49,28 @@ class ExtendedNatsClient:
             self._root_folder = self._env['HOME'] + "/vbus/"
         self._nats = Client()
         self._network_ip: Optional[str] = None  # populated during mdns discovery
+
+        self._ssl_ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+        ca_path = os.path.join(os.path.dirname(__file__), 'certificate', 'veea-ca.pem')
+        LOGGER.debug("ca file path: " + ca_path)
+        self._ssl_ctx.load_verify_locations(ca_path)
+
+        # check which password to use for registration
+        self._password = password
+        if self._password == None:
+            self._password = DEFAULT_PASSWORD
+            user_config_file = USER_CONFIG_FILE
+            if self._env[USER_CONFIG] is not None:
+                user_config_file = self._env[USER_CONFIG]
+            LOGGER.debug("user-config file path: " + user_config_file)
+            if os.path.isfile(user_config_file):
+                LOGGER.debug("load user configuration file" + user_config_file)
+                with open(user_config_file, 'r') as content_file:
+                    content = content_file.read()
+                    config = json.loads(content)
+                    if config["vBusPwd"] != None:
+                        self._password = config["vBusPwd"] 
+            
 
     @property
     def hostname(self) -> str:
@@ -66,9 +93,10 @@ class ExtendedNatsClient:
     @staticmethod
     def _read_env_vars():
         return {
-            'HOME'   : os.environ.get('HOME'),
-            VBUS_PATH: os.environ.get(VBUS_PATH),
-            VBUS_URL : os.environ.get(VBUS_URL),
+            'HOME'      : os.environ.get('HOME'),
+            VBUS_PATH   : os.environ.get(VBUS_PATH),
+            VBUS_URL    : os.environ.get(VBUS_URL),
+            USER_CONFIG : os.environ.get(USER_CONFIG),
         }
 
     async def async_connect(self):
@@ -96,18 +124,19 @@ class ExtendedNatsClient:
 
         self._save_config_file(config)
 
+
         # try to connect directly and push user if fail
         try:
             await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
                                      password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
-                                     name=config["client"]["user"], closed_cb=self._async_nats_closed)
+                                     name=config["client"]["user"], tls=self._ssl_ctx, closed_cb=self._async_nats_closed)
         except NatsError:
             LOGGER.debug("unable to connect with user in config file, adding it")
             await self._publish_user(server_url, config)
             await asyncio.sleep(1, loop=self._loop)
             await self._nats.connect(server_url, io_loop=self._loop, user=config["client"]["user"],
                                      password=config["key"]["private"], connect_timeout=1, max_reconnect_attempts=2,
-                                     name=config["client"]["user"], closed_cb=self._async_nats_closed)
+                                     name=config["client"]["user"], tls=self._ssl_ctx, closed_cb=self._async_nats_closed)
 
         await asyncio.sleep(1, loop=self._loop)
 
@@ -164,7 +193,7 @@ class ExtendedNatsClient:
     async def _publish_user(self, server_url: str, config):
         nats = Client()
         await nats.connect(server_url, loop=self._loop,
-                           user="anonymous", password="anonymous",
+                           user="anonymous", password=self._password, tls=self._ssl_ctx,
                            connect_timeout=1, max_reconnect_attempts=2)
         data = json.dumps(config["client"]).encode('utf-8')
         await nats.publish("system.authorization." + self._remote_hostname + ".add", data)
@@ -188,7 +217,7 @@ class ExtendedNatsClient:
                     ip = socket.gethostbyname(f"{self._remote_hostname}.local")
                 except:
                     return [], None  # cannot resolve
-            return [f"nats://{ip}:21400"], None
+            return [f"tls://{ip}:21400"], None
 
         # find Vbus server - strategy 1: get url from config file
         def get_from_config_file() -> Tuple[List[str], Optional[str]]:
@@ -201,7 +230,7 @@ class ExtendedNatsClient:
 
         # find vbus server  - strategy 3: try default url client://hostname.service.veeamesh.local:21400
         def get_local_default() -> Tuple[List[str], Optional[str]]:
-            return [f"nats://"+self._hostname+".service.veeamesh.local:21400"], None
+            return [f"tls://"+self._hostname+".service.veeamesh.local:21400"], None
 
         # find vbus server  - strategy 4: find it using avahi
         def get_from_zeroconf() -> Tuple[List[str], Optional[str]]:
@@ -217,16 +246,16 @@ class ExtendedNatsClient:
         # find vbus server  - strategy 5: try global (MEN) url client://vbus.service.veeamesh.local:21400
         def get_global_default() -> Tuple[List[str], Optional[str]]:
             if self._isvh == False:
-                return [f"nats://vbus.service.veeamesh.local:21400"], None
+                return [f"tls://vbus.service.veeamesh.local:21400"], None
             else:
                 return [f""], None
 
         find_server_url_strategies = [
-            get_from_hub_id,
+            #get_from_hub_id,
             get_from_config_file,
             get_from_env,
             get_local_default,
-            get_from_zeroconf,
+            #get_from_zeroconf,
             get_global_default,
         ]
 
@@ -255,15 +284,15 @@ class ExtendedNatsClient:
         else:
             return success_url, new_host
 
-    async def _test_vbus_url(self, url: str, user="anonymous", pwd="anonymous") -> bool:
+    async def _test_vbus_url(self, url: str, user="anonymous") -> bool:
         if not url:
             return False
 
         nc = Client()
-        LOGGER.debug("test connection to: " + url + " with user: " + user + " and pwd: " + pwd)
+        LOGGER.debug("test connection to: " + url + " with user: " + user)
         try:
-            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
-                              max_reconnect_attempts=2)
+            task = nc.connect(url, loop=self._loop, user=user, password=self._password, connect_timeout=1,
+                              max_reconnect_attempts=2, tls=self._ssl_ctx)
 
             # Wait for at most 5 seconds, in some case nats library is stuck...
             await asyncio.wait_for(task, timeout=5)
@@ -272,7 +301,7 @@ class ExtendedNatsClient:
         else:
             return True
 
-    async def _get_hostname_from_vBus(self, url: str, user="anonymous", pwd="anonymous") -> str:
+    async def _get_hostname_from_vBus(self, url: str, user="anonymous") -> str:
         if not url:
             return ""
 
@@ -281,8 +310,8 @@ class ExtendedNatsClient:
         vbus_hostname = ""
         nc = Client()
         try:
-            task = nc.connect(url, loop=self._loop, user=user, password=pwd, connect_timeout=1,
-                              max_reconnect_attempts=2)
+            task = nc.connect(url, loop=self._loop, user=user, password=self._password, connect_timeout=1,
+                              max_reconnect_attempts=2, tls=self._ssl_ctx)
 
             # Wait for at most 5 seconds, in some case nats library is stuck...
             await asyncio.wait_for(task, timeout=5)

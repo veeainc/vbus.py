@@ -14,7 +14,7 @@ class Client(NodeManager):
         >>> await client.connect()
     """
 
-    def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None, static_path: str = None):
+    def __init__(self, app_domain: str, app_id: str, loop=None, hub_id: str = None, password: str = None, static_path: str = None):
         """ Creates a new Client.
             :param app_domain: Application domain : "system" for now
             :param app_id: Application identifier

@@ -264,7 +264,7 @@ class NodeManager(Node):
         Note: The client inherits from the NodeManager
     """
 
-    def __init__(self, nats: ExtendedNatsClient, static_path: str = None):
+    def __init__(self, nats: ExtendedNatsClient, password: str = None, static_path: str = None):
         """ Creates a new NodeManager.
 
             :param nats: The extended nats client
@@ -273,6 +273,7 @@ class NodeManager(Node):
         super().__init__(nats, "", definitions.NodeDef({}))
         self._nats = nats
         self._static_path = static_path
+        self._password = password
 
     async def initialize(self):
         await self._nats.async_subscribe("", cb=self._on_get_nodes, with_host=False)

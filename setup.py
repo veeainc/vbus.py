@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='vbus',
-    version='1.6.6',
+    version='1.7.0',
     description='vBus client',
     long_description='vBus client',
     classifiers=[
@@ -17,7 +17,8 @@ setup(
     author='Michael Mardinian',
     author_email='mmardinian@veea.com',
     license='To Be Define',
-    packages=['vbus', 'vbus.tests'],
+    packages=['vbus', 'vbus.tests', 'vbus.certificate'],
+    package_data={'vbus.certificate':['*']},
     install_requires=[
         'zeroconf>=0.27.0',
         'bcrypt>=3.1.7',
